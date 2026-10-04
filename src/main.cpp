@@ -227,23 +227,44 @@ struct Daemon {
         if (!settings.save(settingsPath)) std::fprintf(stderr, "[mousepet] could not save %s\n", settingsPath.c_str());
     }
 
+    static std::pair<float, float> getCursorCenterOffset() {
+        float sz = 24.0f;
+        const char* env = std::getenv("XCURSOR_SIZE");
+        if (env && *env) {
+            float v = std::strtof(env, nullptr);
+            if (v >= 8.0f && v <= 128.0f) sz = v;
+        }
+        // Pointer hotspot is at the tip (0,0). Visual center of standard arrow cursor is at ~40% width/height
+        return { sz * 0.40f, sz * 0.40f };
+    }
+
     bool readCursor(float& x, float& y) {
         if (demo) {
             auto p = demoCursor("circle", demoFrame++, demoCx, demoCy);
             x = p.first; y = p.second;
             return true;
         }
+        bool ok = false;
         // First priority: instant zero-latency shared memory bridge from Hyprland plugin
         auto bp = bridge.queryPos();
         if (bp) {
             x = bp->first; y = bp->second;
+            ok = true;
+        } else {
+            // Fallback: Hyprland socket query
+            auto p = cursor.query();
+            if (p) {
+                x = p->first; y = p->second;
+                ok = true;
+            }
+        }
+        if (ok) {
+            const auto [ox, oy] = getCursorCenterOffset();
+            x += ox;
+            y += oy;
             return true;
         }
-        // Fallback: Hyprland socket query
-        auto p = cursor.query();
-        if (!p) return false;
-        x = p->first; y = p->second;
-        return true;
+        return false;
     }
 
     void select(const AccessoryDef& def) {

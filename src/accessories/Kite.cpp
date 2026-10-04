@@ -6,6 +6,7 @@ class Kite final : public Accessory {
     static constexpr int TAIL_NODES = 7;
     Chain tail_{TAIL_NODES};
     float flutter_ = 0.0f;
+    float bank_ = 0.0f;
 
 public:
     explicit Kite(Pet& pet) {
@@ -16,14 +17,19 @@ public:
         Body& b = pet.body;
         flutter_ += 0.12f;
         b.vy += std::sin(flutter_) * 0.04f;
+
+        // Dynamic aerodynamic banking when cursor moves
+        const float targetBank = std::clamp((pet.mouse.vx * 0.08f + b.vx * 0.05f), -0.70f, 0.70f);
+        bank_ += (targetBank - bank_) * 0.22f;
     }
 
     void lateUpdate(Pet& pet) override {
         const Body& b = pet.body;
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
         // Tail starts from the bottom tip of the kite (relative to angle)
-        const float c = std::cos(b.angle), s = std::sin(b.angle);
-        const float startX = b.x - s * 0 + c * 0 - s * 22;
-        const float startY = b.y + c * 0 + s * 0 + c * 22;
+        const float c = std::cos(totalAngle), s = std::sin(totalAngle);
+        const float startX = b.x - s * 22.0f;
+        const float startY = b.y + c * 22.0f;
         tail_.follow(startX, startY, 6.0f, 0.82f, 0.25f, 0.70f);
     }
 
@@ -79,9 +85,10 @@ public:
         cairo_restore(cr);
 
         // 2. Draw Diamond Kite Body
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
         cairo_save(cr);
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle);
+        cairo_rotate(cr, totalAngle);
         cairo_scale(cr, sz, sz);
 
         // Soft ambient aura

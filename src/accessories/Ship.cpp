@@ -4,22 +4,45 @@ namespace mousepet {
 
 class Ship final : public Accessory {
     float thrusterPulse_ = 0.0f;
+    float currentAngle_ = 0.0f;
+    bool initialized_ = false;
 
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
-        thrusterPulse_ += 0.25f + sp * 0.1f;
+        thrusterPulse_ += 0.25f + sp * 0.15f;
 
-        // Ion engine exhaust trail
-        if (sp > 0.8f || pet.random() < 0.25f) {
-            float ang = b.angle + PI;
-            float c = std::cos(ang), s = std::sin(ang);
-            float ex = b.x + c * 16.0f, ey = b.y + s * 16.0f;
+        // Smooth flight direction:
+        // When moving, ship's nose aligns directly with motion vector.
+        // When stationary, ship gently banks with inertia and stays upright.
+        float targetAngle = 0.0f;
+        if (sp > 0.6f) {
+            targetAngle = std::atan2(b.vy, b.vx) + float(PI * 0.5);
+        } else {
+            // Idle hover: gentle bank based on horizontal velocity
+            targetAngle = std::clamp(b.vx * 0.06f, -0.45f, 0.45f);
+        }
+
+        if (!initialized_) {
+            currentAngle_ = targetAngle;
+            initialized_ = true;
+        } else {
+            float diff = targetAngle - currentAngle_;
+            diff -= float(TAU) * std::round(diff / float(TAU));
+            currentAngle_ += diff * (sp > 1.0f ? 0.22f : 0.10f);
+        }
+
+        // Ion engine exhaust trail shooting out from the rear thruster
+        if (sp > 0.6f || pet.random() < 0.25f) {
+            // Thruster is at (0, 14) in ship coordinates
+            const float rearAng = currentAngle_ + float(PI * 0.5);
+            const float c = std::cos(rearAng), s = std::sin(rearAng);
+            const float ex = b.x + c * 16.0f, ey = b.y + s * 16.0f;
             pet.emit(ex + (pet.random() - 0.5f) * 4.0f,
                      ey + (pet.random() - 0.5f) * 4.0f,
-                     c * (1.5f + pet.random() * 2.0f) + (pet.random() - 0.5f) * 0.5f,
-                     s * (1.5f + pet.random() * 2.0f) + (pet.random() - 0.5f) * 0.5f,
+                     c * (1.6f + pet.random() * 2.0f) + (pet.random() - 0.5f) * 0.4f,
+                     s * (1.6f + pet.random() * 2.0f) + (pet.random() - 0.5f) * 0.4f,
                      0.6f);
         }
     }
@@ -39,7 +62,7 @@ public:
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle + PI * 0.5f);  // Ship faces forward along motion
+        cairo_rotate(cr, currentAngle_);  // Ship faces forward along motion vector
         cairo_scale(cr, sz, sz);
 
         // 1. Plasma Thruster Exhaust
@@ -160,7 +183,7 @@ static struct ShipRegistrar {
     ShipRegistrar() {
         registerAccessory({"ship", "Nave Espacial", rgb(0x38bdf8),
                            CoreConfig{60, 0.55f, 0.93f, 0.15f},
-                           hints({{"orbitX", 45}, {"orbitY", -25}, {"sway", 4}, {"tilt", 0.90f}, {"tiltVel", 0.08f}, {"kick", 5}, {"sparks", 16}}),
+                           hints({{"orbitX", 45}, {"orbitY", -25}, {"sway", 4}, {"tilt", 0.0f}, {"tiltVel", 0.0f}, {"kick", 5}, {"sparks", 16}}),
                            RopeStyle{rgb(0x334155), rgb(0x38bdf8), 2.0f},
                            ParticleStyle{rgb(0x38bdf8), 2.2f, 0.0f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

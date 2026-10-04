@@ -46,29 +46,48 @@ public:
              {{0, rgba(254, 240, 138, 0.95)}, {0.4, rgba(190, 242, 100, 0.45)}, {1, rgba(163, 230, 53, 0)}},
              CAIRO_OPERATOR_SCREEN, glowIntensity, true);
 
-        // 2. Vibrating Gossamer Wings (Behind thorax)
+        // 2. Vibrating Gossamer Wings (Attached directly to thorax)
         cairo_save(cr);
-        source(cr, rgba(240, 253, 244, 0.65));
         cairo_set_line_width(cr, 0.8);
 
-        // Left forewing & hindwing
+        // Left wings (forewing and smaller hindwing)
         cairo_save(cr);
-        cairo_translate(cr, -3, -2);
-        cairo_rotate(cr, -0.6 - wingAngle);
-        ellipse(cr, -8, -6, 11, 4.5, -0.4);
+        cairo_translate(cr, -2.5, -1.0);
+        // Left hindwing
+        cairo_save(cr);
+        cairo_rotate(cr, -0.9 - wingAngle * 0.7);
+        source(cr, rgba(220, 252, 231, 0.50));
+        ellipse(cr, -5.5, 0, 5.5, 2.8);
         cairo_fill_preserve(cr);
-        source(cr, rgba(255, 255, 255, 0.8)); cairo_stroke(cr);
+        source(cr, rgba(255, 255, 255, 0.75)); cairo_stroke(cr);
+        cairo_restore(cr);
+        // Left forewing
+        cairo_rotate(cr, -0.45 - wingAngle);
+        source(cr, rgba(240, 253, 244, 0.70));
+        ellipse(cr, -7.0, 0, 7.0, 3.6);
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.85)); cairo_stroke(cr);
         cairo_restore(cr);
 
-        // Right forewing & hindwing
+        // Right wings (forewing and smaller hindwing)
         cairo_save(cr);
-        cairo_translate(cr, 3, -2);
-        cairo_rotate(cr, 0.6 + wingAngle);
-        source(cr, rgba(240, 253, 244, 0.65));
-        ellipse(cr, 8, -6, 11, 4.5, 0.4);
+        cairo_translate(cr, 2.5, -1.0);
+        // Right hindwing
+        cairo_save(cr);
+        cairo_rotate(cr, 0.9 + wingAngle * 0.7);
+        source(cr, rgba(220, 252, 231, 0.50));
+        ellipse(cr, 5.5, 0, 5.5, 2.8);
         cairo_fill_preserve(cr);
-        source(cr, rgba(255, 255, 255, 0.8)); cairo_stroke(cr);
+        source(cr, rgba(255, 255, 255, 0.75)); cairo_stroke(cr);
         cairo_restore(cr);
+        // Right forewing
+        cairo_rotate(cr, 0.45 + wingAngle);
+        source(cr, rgba(240, 253, 244, 0.70));
+        ellipse(cr, 7.0, 0, 7.0, 3.6);
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.85)); cairo_stroke(cr);
+        cairo_restore(cr);
+
         cairo_restore(cr);
 
         // 3. Glowing Lantern Abdomen (Tail bulb)
