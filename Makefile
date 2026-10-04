@@ -23,15 +23,8 @@ proto_xml  = $(word 2,$(subst :, ,$1))
 PROTO_H    := $(foreach p,$(PROTOCOLS),$(PROTO)/$(call proto_name,$p)-client-protocol.h)
 PROTO_O    := $(foreach p,$(PROTOCOLS),$(PROTO)/$(call proto_name,$p)-protocol.o)
 
-CORE_SRC := src/Sim.cpp src/Settings.cpp \
-	src/accessories/Registry.cpp \
-	src/accessories/Jellyfish.cpp \
-	src/accessories/Balloon.cpp \
-	src/accessories/Star.cpp \
-	src/accessories/Ghost.cpp \
-	src/accessories/Fish.cpp \
-	src/accessories/LuaLoader.cpp \
-	src/accessories/CppLoader.cpp
+ACCESSORY_SRC := $(wildcard src/accessories/*.cpp)
+CORE_SRC      := src/Sim.cpp src/Settings.cpp $(ACCESSORY_SRC)
 
 APP_SRC  := $(CORE_SRC) src/Ipc.cpp src/Overlay.cpp src/main.cpp
 APP_OBJ  := $(APP_SRC:src/%.cpp=$(BUILD)/obj/%.o)

@@ -340,6 +340,11 @@ struct Daemon {
             else pet.setMouse(x, y);
         }
 
+        // Periodic reconnect check if bridge started later
+        if (!bridge.isConnected() && (framesInWindow % 60 == 0)) {
+            bridge.init();
+        }
+
         // Click detection: trigger burst on pointer down
         uint32_t btn = 0;
         if (bridge.checkClick(btn)) {
@@ -439,7 +444,24 @@ int run(int argc, char** argv) {
     }
     dm.settings.applyTo(dm.pet);
 
-    dm.bridge.init();
+    // Auto-load Hyprland companion hook plugin for click burst events if on Hyprland
+    const char* hyprSig = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
+    if (hyprSig && *hyprSig && !dm.demo) {
+        dm.bridge.init();
+        if (!dm.bridge.isConnected()) {
+            std::string plugPath = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/lib/mousepet-hyprland.so";
+            if (access(plugPath.c_str(), F_OK) != 0) plugPath = "build/mousepet-hyprland.so";
+            char absPath[PATH_MAX];
+            if (realpath(plugPath.c_str(), absPath)) {
+                std::string cmd = "hyprctl plugin load " + std::string(absPath) + " >/dev/null 2>&1";
+                if (std::system(cmd.c_str()) == 0) {
+                    dm.bridge.init();
+                    std::fprintf(stderr, "[mousepet] Automatically connected Hyprland click and cursor hook\n");
+                }
+            }
+        }
+    }
+
     if (!dm.demo && !dm.bridge.isConnected() && !dm.cursor.init()) {
         std::fprintf(stderr, "mousepet needs Hyprland's IPC socket or mousepet-hyprland plugin for cursor position.\n"
                              "(HYPRLAND_INSTANCE_SIGNATURE not set or socket missing). Use --demo to preview.\n");
