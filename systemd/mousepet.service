@@ -1,0 +1,13 @@
+[Unit]
+Description=MousePet cursor companion overlay
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mousepet run
+Restart=on-failure
+RestartSec=1s
+
+[Install]
+WantedBy=graphical-session.target

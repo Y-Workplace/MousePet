@@ -1,0 +1,18 @@
+# Build and temporary files
+build/
+*.o
+*.d
+*.so
+*.a
+*.tmp
+*.log
+
+# Snapshots and test artifacts
+snapshots/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+.fuse_hidden*
