@@ -67,7 +67,7 @@ void Chain::hang(float seg, float gravity, float damping, int iters) {
             if (d == 0) d = 0.001f;
             const float k = (d - seg) / d;
             dx *= k; dy *= k;
-            if (i == 0) { x[j] -= dx * 0.9f; y[j] -= dy * 0.9f; }
+            if (i == 0) { x[j] -= dx; y[j] -= dy; }
             else if (j == last) { x[i] += dx * 0.9f; y[i] += dy * 0.9f; sx += dx; sy += dy; }
             else { x[i] += dx * 0.5f; y[i] += dy * 0.5f; x[j] -= dx * 0.5f; y[j] -= dy * 0.5f; }
         }
@@ -209,21 +209,10 @@ void Pet::step() {
     b.vx *= config.drag; b.vy *= config.drag;
     b.x += b.vx; b.y += b.vy;
 
-    // Rope
-    rope.x[0] = m.x; rope.y[0] = m.y;
-    rope.x[LAST] = b.x; rope.y[LAST] = b.y;
-    rope.hang(config.ropeLength / LAST, config.ropeGravity, 0.88f, 3);
+    // Rope & anchor constraint loop every frame
+    updateAnchor(m.x, m.y);
     b.vx -= rope.pullX * config.stiffness * 0.5f;
     b.vy -= rope.pullY * config.stiffness * 0.5f;
-
-    // Never breaks loose
-    const float dx = b.x - m.x, dy = b.y - m.y;
-    const float dist = std::sqrt(dx * dx + dy * dy), max = config.ropeLength * h.maxStretch;
-    if (dist > max) {
-        const float f = max / dist;
-        b.x = m.x + dx * f; b.y = m.y + dy * f;
-        b.vx *= 0.5f; b.vy *= 0.5f;
-    }
 
     // Tilt (normalised angular difference: no 360° spins when crossing ±pi)
     float raw = std::atan2(b.y - rope.y[LAST - 1], b.x - rope.x[LAST - 1]) + h.tiltBase;
@@ -258,10 +247,35 @@ void Pet::drawParticles(cairo_t* cr) const {
     cairo_restore(cr);
 }
 
+void Pet::updateAnchor(float mx, float my) {
+    if (!def) return;
+    mouse.x = mx;
+    mouse.y = my;
+    rope.x[0] = mx;
+    rope.y[0] = my;
+
+    // Never breaks loose: clamp body distance if dragged fast
+    const float dx = body.x - mx, dy = body.y - my;
+    const float dist = std::sqrt(dx * dx + dy * dy);
+    const float max = config.ropeLength * hints.maxStretch;
+    if (dist > max && dist > 1e-4f) {
+        const float f = max / dist;
+        body.x = mx + dx * f;
+        body.y = my + dy * f;
+        body.vx *= 0.5f;
+        body.vy *= 0.5f;
+    }
+    rope.x[LAST] = body.x;
+    rope.y[LAST] = body.y;
+
+    // Fixed-anchor relaxation loop runs every frame (10 iterations)
+    rope.hang(config.ropeLength / LAST, config.ropeGravity, 0.88f, 10);
+}
+
 void Pet::render(cairo_t* cr) {
     if (!def) return;
-    // The rope tip follows the real cursor even between physics steps (high refresh monitors)
-    rope.x[0] = mouse.x; rope.y[0] = mouse.y;
+    // Always solve anchor constraint on the live cursor every frame
+    updateAnchor(mouse.x, mouse.y);
     cairo_save(cr);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
@@ -322,12 +336,6 @@ bool Pet::setParam(std::string_view key, float v) {
 const char* Pet::state() const {
     if (!lastError.empty()) return "Error";
     return body.burst > 0.2f ? "Burst" : mouse.speed > 4 ? "Following" : "Floating";
-}
-
-const AccessoryDef* findAccessory(std::string_view id) {
-    for (const auto& d : accessories())
-        if (d.id == id) return &d;
-    return nullptr;
 }
 
 }  // namespace mousepet

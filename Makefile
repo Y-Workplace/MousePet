@@ -2,13 +2,13 @@ CXX      ?= g++
 BUILD    ?= build
 PROTO    := $(BUILD)/proto
 WL_PROTO := $(shell pkg-config --variable=pkgdatadir wayland-protocols)
-PKGS     := wayland-client cairo
+PKGS     := wayland-client cairo luajit
 
 CXXFLAGS ?= -O2 -g
-CXXFLAGS += -std=c++20 -Wall -Wextra -MMD -MP -Isrc -I$(PROTO) $(shell pkg-config --cflags $(PKGS))
+CXXFLAGS += -std=c++26 -Wall -Wextra -MMD -MP -Isrc -I$(PROTO) $(shell pkg-config --cflags $(PKGS))
 CFLAGS   ?= -O2
 CFLAGS   += -I$(PROTO) $(shell pkg-config --cflags wayland-client)
-LDLIBS   := $(shell pkg-config --libs $(PKGS)) -lm
+LDLIBS   := $(shell pkg-config --libs $(PKGS)) -ldl -lm
 
 # name:xml
 PROTOCOLS := \
@@ -23,7 +23,16 @@ proto_xml  = $(word 2,$(subst :, ,$1))
 PROTO_H    := $(foreach p,$(PROTOCOLS),$(PROTO)/$(call proto_name,$p)-client-protocol.h)
 PROTO_O    := $(foreach p,$(PROTOCOLS),$(PROTO)/$(call proto_name,$p)-protocol.o)
 
-CORE_SRC := src/Sim.cpp src/Accessories.cpp src/Settings.cpp
+CORE_SRC := src/Sim.cpp src/Settings.cpp \
+	src/accessories/Registry.cpp \
+	src/accessories/Jellyfish.cpp \
+	src/accessories/Balloon.cpp \
+	src/accessories/Star.cpp \
+	src/accessories/Ghost.cpp \
+	src/accessories/Fish.cpp \
+	src/accessories/LuaLoader.cpp \
+	src/accessories/CppLoader.cpp
+
 APP_SRC  := $(CORE_SRC) src/Ipc.cpp src/Overlay.cpp src/main.cpp
 APP_OBJ  := $(APP_SRC:src/%.cpp=$(BUILD)/obj/%.o)
 CORE_OBJ := $(CORE_SRC:src/%.cpp=$(BUILD)/obj/%.o)
@@ -33,7 +42,7 @@ PREFIX   ?= $(HOME)/.local
 LOADER   := $(firstword $(wildcard /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-aarch64.so.1))
 
 .DEFAULT_GOAL := all
-all: $(BUILD)/mousepet
+all: $(BUILD)/mousepet plugin
 
 define PROTO_RULES
 $(PROTO)/$(call proto_name,$1)-client-protocol.h: $(call proto_xml,$1)
@@ -56,6 +65,15 @@ $(BUILD)/mousepet: $(APP_OBJ) $(PROTO_O)
 	$(CXX) $^ -o $@ $(LDLIBS)
 	@chmod +x $@ 2>/dev/null || true
 
+PLUGIN_CXXFLAGS := -Wall -Wextra -fPIC -std=c++26 -O2 \
+	$(shell pkg-config --cflags hyprland pixman-1 libdrm 2>/dev/null | sed 's#-I\([^ ]*/hyprland\)\($$\| \)#-I\1 -I\1/src #g')
+
+$(BUILD)/mousepet-hyprland.so: plugin/mousepet_plugin.cpp
+	@mkdir -p $(BUILD)
+	$(CXX) $(PLUGIN_CXXFLAGS) -shared $< -o $@
+
+plugin: $(BUILD)/mousepet-hyprland.so
+
 $(BUILD)/sim_tests: tests/sim_tests.cpp $(CORE_OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDLIBS)
 
@@ -67,12 +85,16 @@ test: $(BUILD)/sim_tests $(BUILD)/mousepet
 sandbox-test: $(BUILD)/mousepet
 	python3 tests/sandbox_test.py --binary $(BUILD)/mousepet
 
-install: $(BUILD)/mousepet
+install: $(BUILD)/mousepet $(BUILD)/mousepet-hyprland.so
 	install -Dm755 $(BUILD)/mousepet $(DESTDIR)$(PREFIX)/bin/mousepet
+	ln -sf mousepet $(DESTDIR)$(PREFIX)/bin/cursorpet
+	install -Dm755 $(BUILD)/mousepet-hyprland.so $(DESTDIR)$(PREFIX)/lib/mousepet-hyprland.so
 	install -Dm644 systemd/mousepet.service $(DESTDIR)$(HOME)/.config/systemd/user/mousepet.service
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/mousepet $(DESTDIR)$(HOME)/.config/systemd/user/mousepet.service
+	rm -f $(DESTDIR)$(PREFIX)/bin/mousepet $(DESTDIR)$(PREFIX)/bin/cursorpet
+	rm -f $(DESTDIR)$(PREFIX)/lib/mousepet-hyprland.so
+	rm -f $(DESTDIR)$(HOME)/.config/systemd/user/mousepet.service
 
 run: $(BUILD)/mousepet
 	$(LOADER) ./$(BUILD)/mousepet run
@@ -80,5 +102,5 @@ run: $(BUILD)/mousepet
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test sandbox-test install uninstall run clean
+.PHONY: all test sandbox-test install uninstall run clean plugin
 -include $(APP_OBJ:.o=.d)

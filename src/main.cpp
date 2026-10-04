@@ -1,4 +1,3 @@
-// MousePet — a little pet tied to the system cursor (C++/Wayland port of MousePet.html).
 #include <cairo.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -10,12 +9,14 @@
 #include <sys/timerfd.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <climits>
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -24,23 +25,27 @@
 #include "Overlay.hpp"
 #include "Settings.hpp"
 #include "Sim.hpp"
+#include "accessories/Registry.hpp"
 
-using namespace mousepet;
-
+namespace mousepet {
 namespace {
 
-constexpr const char* VERSION = "0.1.0";
+constexpr const char* VERSION = "0.2.0";
 
 void usage() {
-    std::puts(
-        "MousePet - a pet tied to your cursor (Wayland overlay, Hyprland cursor source)\n"
+    std::fprintf(
+        stderr,
+        "MousePet / CursorPet %s — physical desktop cursor companion\n"
         "\n"
         "Usage:\n"
-        "  mousepet [run] [--demo] [--accessory ID]   start the overlay (foreground)\n"
-        "  mousepet ctl COMMAND...                    control a running instance\n"
+        "  mousepet [run] [options]                   run the background companion\n"
+        "  mousepet pet next | prev | <id>            switch pet accessory\n"
+        "  mousepet --pet --next | --pet <id>         switch pet (flag syntax)\n"
+        "  mousepet burst                             emit click burst\n"
+        "  mousepet plugin load | unload | status     manage Hyprland hook plugin\n"
+        "  mousepet ctl COMMAND...                    control running instance\n"
         "  mousepet list                              list accessories and parameters\n"
         "  mousepet snapshot OUT.png [options]        headless render (tests/previews)\n"
-        "      --accessory ID  --steps N  --burst-at N  --motion still|circle|shake  --scale S\n"
         "\n"
         "Control commands:\n"
         "  burst | next | prev | select ID | set KEY VALUE | reset\n"
@@ -48,9 +53,15 @@ void usage() {
         "  KEY: ropeLength stiffness drag ropeGravity scale, or any accessory parameter\n"
         "\n"
         "Run options:\n"
-        "  --demo   ignore the real cursor and orbit a virtual one (sandbox testing)\n"
-        "  --accessory ID  start with this accessory (also saved)\n"
-        "Environment: MOUSEPET_CONFIG (settings file), MOUSEPET_SOCKET (control socket)\n");
+        "  --demo            orbit a virtual cursor for sandbox testing\n"
+        "  --accessory ID    start with this accessory\n"
+        "\n"
+        "Environment variables:\n"
+        "  MOUSEPET_ACCESSORY / CURSORPET_ACCESSORY   default accessory on start\n"
+        "  MOUSEPET_SCALE / CURSORPET_SCALE           visual scale factor (0.25..4.0)\n"
+        "  MOUSEPET_CONFIG                            path to settings.ini\n"
+        "  MOUSEPET_SOCKET                            control socket path\n",
+        VERSION);
 }
 
 std::string fmt(float v) {
@@ -70,6 +81,7 @@ std::string jsonEscape(const std::string& s) {
 }
 
 std::string listText() {
+    loadDynamicAccessories();
     std::ostringstream s;
     for (const auto& d : accessories()) {
         s << d.id << "\t" << d.name << "\t";
@@ -93,6 +105,7 @@ std::pair<float, float> demoCursor(const std::string& motion, int frame, float c
 
 // ── Headless snapshot ─────────────────────────────────────────────────
 int snapshot(int argc, char** argv) {
+    loadDynamicAccessories();
     if (argc < 1) { usage(); return 2; }
     const std::string out = argv[0];
     std::string acc = "jellyfish", motion = "still";
@@ -150,11 +163,54 @@ int ctl(int argc, char** argv) {
     return r->rfind("error", 0) == 0 ? 1 : 0;
 }
 
+int pluginCmd(int argc, char** argv) {
+    std::string sub = argc > 0 ? argv[0] : "status";
+    const char* home = std::getenv("HOME");
+    std::vector<std::string> candidates = {
+        std::string(home ? home : "") + "/.local/lib/mousepet-hyprland.so",
+        "build/mousepet-hyprland.so",
+        "../build/mousepet-hyprland.so"
+    };
+
+    std::string pluginPath;
+    for (const auto& c : candidates) {
+        if (access(c.c_str(), F_OK) == 0) { pluginPath = c; break; }
+    }
+
+    if (sub == "load") {
+        if (pluginPath.empty()) {
+            std::fprintf(stderr, "Plugin not found. Build it with: make plugin\n");
+            return 1;
+        }
+        char absBuf[PATH_MAX];
+        if (realpath(pluginPath.c_str(), absBuf)) {
+            std::string cmd = "hyprctl plugin load " + std::string(absBuf);
+            return std::system(cmd.c_str());
+        }
+        return 1;
+    } else if (sub == "unload") {
+        if (!pluginPath.empty()) {
+            char absBuf[PATH_MAX];
+            if (realpath(pluginPath.c_str(), absBuf)) {
+                std::string cmd = "hyprctl plugin unload " + std::string(absBuf);
+                return std::system(cmd.c_str());
+            }
+        }
+        return std::system("hyprctl plugin unload mousepet-hyprland");
+    } else if (sub == "status") {
+        return std::system("hyprctl plugin list | grep -E -A 3 'mousepet|dynamic-cursors' || true");
+    }
+
+    std::fprintf(stderr, "Usage: mousepet plugin load|unload|status\n");
+    return 1;
+}
+
 // ── Daemon ────────────────────────────────────────────────────────────
 struct Daemon {
     Pet pet{uint32_t(std::chrono::steady_clock::now().time_since_epoch().count())};
     Settings settings;
     std::string settingsPath = Settings::defaultPath();
+    PetBridgeClient bridge;
     HyprlandCursor cursor;
     Overlay overlay;
     bool demo = false, running = true;
@@ -177,6 +233,13 @@ struct Daemon {
             x = p.first; y = p.second;
             return true;
         }
+        // First priority: instant zero-latency shared memory bridge from Hyprland plugin
+        auto bp = bridge.queryPos();
+        if (bp) {
+            x = bp->first; y = bp->second;
+            return true;
+        }
+        // Fallback: Hyprland socket query
         auto p = cursor.query();
         if (!p) return false;
         x = p->first; y = p->second;
@@ -249,7 +312,6 @@ struct Daemon {
             if (a == "scale") {
                 const float old = settings.scale;
                 settings.scale = std::clamp(v, 0.25f, 4.f);
-                // Keep the pet where it is on screen: simulation space is screen / scale.
                 const float k = old / settings.scale;
                 pet.place(pet.mouse.x * k, pet.mouse.y * k);
             } else if (!settings.set(pet, a, v)) {
@@ -273,12 +335,18 @@ struct Daemon {
         float x, y;
         if (readCursor(x, y)) {
             x /= settings.scale; y /= settings.scale;
-            // Huge jumps (another monitor, warp) would fling the pet across the screen: re-seat it.
             const float dx = x - pet.mouse.x, dy = y - pet.mouse.y;
             if (dx * dx + dy * dy > 1500.f * 1500.f / (settings.scale * settings.scale)) pet.place(x, y);
             else pet.setMouse(x, y);
         }
-        const int steps = int(std::min<uint64_t>(expirations, 4));  // avoid a spiral of death after a stall
+
+        // Click detection: trigger burst on pointer down
+        uint32_t btn = 0;
+        if (bridge.checkClick(btn)) {
+            pet.burst();
+        }
+
+        const int steps = int(std::min<uint64_t>(expirations, 4));
         for (int i = 0; i < steps; i++) pet.step();
         overlay.draw(pet, options());
 
@@ -297,7 +365,7 @@ struct Daemon {
 int makeListenSocket(const std::string& path) {
     sockaddr_un addr{};
     if (path.size() >= sizeof addr.sun_path) return -1;
-    unlink(path.c_str());  // safe: we hold the instance lock
+    unlink(path.c_str());
     const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
     if (fd < 0) return -1;
     addr.sun_family = AF_UNIX;
@@ -332,8 +400,23 @@ void serveClient(int lfd, Daemon& dm) {
 }
 
 int run(int argc, char** argv) {
+    loadDynamicAccessories();
     Daemon dm;
     std::string startAccessory;
+
+    // Check environment variables
+    const char* envAcc = std::getenv("MOUSEPET_ACCESSORY");
+    if (!envAcc || !*envAcc) envAcc = std::getenv("CURSORPET_ACCESSORY");
+    if (envAcc && *envAcc) startAccessory = envAcc;
+
+    const char* envScale = std::getenv("MOUSEPET_SCALE");
+    if (!envScale || !*envScale) envScale = std::getenv("CURSORPET_SCALE");
+    if (envScale && *envScale) {
+        char* end = nullptr;
+        float sc = std::strtof(envScale, &end);
+        if (end != envScale && sc >= 0.25f && sc <= 4.f) dm.settings.scale = sc;
+    }
+
     for (int i = 0; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--demo") dm.demo = true;
@@ -356,8 +439,9 @@ int run(int argc, char** argv) {
     }
     dm.settings.applyTo(dm.pet);
 
-    if (!dm.demo && !dm.cursor.init()) {
-        std::fprintf(stderr, "mousepet needs Hyprland's IPC socket for the cursor position "
+    dm.bridge.init();
+    if (!dm.demo && !dm.bridge.isConnected() && !dm.cursor.init()) {
+        std::fprintf(stderr, "mousepet needs Hyprland's IPC socket or mousepet-hyprland plugin for cursor position.\n"
                              "(HYPRLAND_INSTANCE_SIGNATURE not set or socket missing). Use --demo to preview.\n");
         return 1;
     }
@@ -368,7 +452,6 @@ int run(int argc, char** argv) {
 
     float x = 0, y = 0;
     if (dm.demo) {
-        // Orbit around the middle of the first output-ish area.
         dm.demoCx = 500; dm.demoCy = 350;
     }
     if (dm.readCursor(x, y)) dm.pet.place(x / dm.settings.scale, y / dm.settings.scale);
@@ -410,7 +493,7 @@ int run(int argc, char** argv) {
             uint64_t exp = 0;
             if (read(tfd, &exp, sizeof exp) == sizeof exp && exp) dm.tick(exp);
         } else {
-            dm.overlay.redrawPending(dm.pet, dm.options());  // a frame callback freed an output
+            dm.overlay.redrawPending(dm.pet, dm.options());
         }
     }
     if (lfd >= 0) { close(lfd); unlink(sockPath.c_str()); }
@@ -422,16 +505,64 @@ int run(int argc, char** argv) {
 }
 
 }  // namespace
+}  // namespace mousepet
 
 int main(int argc, char** argv) {
+    using namespace mousepet;
     const std::string cmd = argc > 1 ? argv[1] : "run";
     if (cmd == "-h" || cmd == "--help" || cmd == "help") { usage(); return 0; }
     if (cmd == "--version") { std::puts(VERSION); return 0; }
-    if (cmd == "ctl") return ctl(argc - 2, argv + 2);
     if (cmd == "list") { std::fputs(listText().c_str(), stdout); return 0; }
+    if (cmd == "ctl") return ctl(argc - 2, argv + 2);
+    if (cmd == "plugin") return pluginCmd(argc - 2, argv + 2);
+    if (cmd == "burst") {
+        char* args[] = {(char*)"burst"};
+        return ctl(1, args);
+    }
+    if (cmd == "next" || cmd == "prev") {
+        char* args[] = {(char*)cmd.c_str()};
+        return ctl(1, args);
+    }
+
+    // Elegant syntax: mousepet pet next | prev | <id>
+    if (cmd == "pet") {
+        if (argc <= 2) {
+            char* args[] = {(char*)"status"};
+            return ctl(1, args);
+        }
+        std::string sub = argv[2];
+        if (sub == "next" || sub == "prev") {
+            char* args[] = {(char*)sub.c_str()};
+            return ctl(1, args);
+        }
+        char* args[] = {(char*)"select", (char*)sub.c_str()};
+        return ctl(2, args);
+    }
+
+    // Elegant syntax: mousepet --pet --next | --next | <id>
+    if (cmd == "--pet") {
+        if (argc <= 2) {
+            char* args[] = {(char*)"next"};
+            return ctl(1, args);
+        }
+        std::string sub = argv[2];
+        if (sub == "--next" || sub == "next") {
+            char* args[] = {(char*)"next"};
+            return ctl(1, args);
+        }
+        if (sub == "--prev" || sub == "prev") {
+            char* args[] = {(char*)"prev"};
+            return ctl(1, args);
+        }
+        if (sub.rfind("--", 0) == 0) sub = sub.substr(2);
+        char* args[] = {(char*)"select", (char*)sub.c_str()};
+        return ctl(2, args);
+    }
+
     if (cmd == "snapshot") return snapshot(argc - 2, argv + 2);
     if (cmd == "run") return run(argc - 2, argv + 2);
     if (!cmd.empty() && cmd[0] == '-') return run(argc - 1, argv + 1);
+
     std::fprintf(stderr, "unknown command '%s'\n", cmd.c_str());
     usage();
     return 2;

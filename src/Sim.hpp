@@ -170,6 +170,8 @@ public:
     /** Teleports mouse + body to the rest pose (used at start-up and after big jumps). */
     void place(float mx, float my);
     void setMouse(float x, float y) { mouse.x = x; mouse.y = y; }
+    /** Anchors the rope to (mx, my), clamps body distance if overstretched, and relaxes constraints every frame. */
+    void updateAnchor(float mx, float my);
     void step();
     void burst();
     /** Draws rope, accessory and particles in simulation coordinates. */

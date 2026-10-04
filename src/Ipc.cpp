@@ -1,6 +1,9 @@
 #include "Ipc.hpp"
 
+#include <fcntl.h>
 #include <poll.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -80,6 +83,76 @@ std::optional<std::pair<float, float>> HyprlandCursor::query() const {
     float x = 0, y = 0;
     if (std::sscanf(r->c_str(), " %f , %f", &x, &y) != 2) return std::nullopt;
     return std::make_pair(x, y);
+}
+
+PetBridgeClient::~PetBridgeClient() {
+    disconnect();
+}
+
+void PetBridgeClient::disconnect() {
+    if (bridge_) {
+        munmap(bridge_, sizeof(SharedPetBridge));
+        bridge_ = nullptr;
+    }
+    if (fd_ >= 0) {
+        close(fd_);
+        fd_ = -1;
+    }
+}
+
+bool PetBridgeClient::init() {
+    if (bridge_) return true;
+    fd_ = shm_open(MOUSEPET_SHM_NAME, O_RDWR, 0);
+    if (fd_ < 0) return false;
+    struct stat st{};
+    if (fstat(fd_, &st) != 0 || st.st_size < (off_t)sizeof(SharedPetBridge)) {
+        close(fd_);
+        fd_ = -1;
+        return false;
+    }
+    void* ptr = mmap(nullptr, sizeof(SharedPetBridge), PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    if (ptr == MAP_FAILED) {
+        close(fd_);
+        fd_ = -1;
+        return false;
+    }
+    bridge_ = static_cast<SharedPetBridge*>(ptr);
+    lastClickSeq_ = bridge_->clickSequence.load(std::memory_order_relaxed);
+    return isConnected();
+}
+
+bool PetBridgeClient::isConnected() {
+    if (!bridge_) {
+        init();
+        if (!bridge_) return false;
+    }
+    if (bridge_->magic != MOUSEPET_BRIDGE_MAGIC || bridge_->version != 1) {
+        disconnect();
+        return false;
+    }
+    const uint64_t now = getNowMs();
+    const uint64_t lastHb = bridge_->lastHeartbeatMs.load(std::memory_order_relaxed);
+    if (!bridge_->isPluginActive.load(std::memory_order_relaxed) || (now > lastHb && now - lastHb > 2000)) {
+        return false;
+    }
+    return true;
+}
+
+std::optional<std::pair<float, float>> PetBridgeClient::queryPos() {
+    if (!isConnected()) return std::nullopt;
+    return std::make_pair(bridge_->mouseX.load(std::memory_order_relaxed),
+                          bridge_->mouseY.load(std::memory_order_relaxed));
+}
+
+bool PetBridgeClient::checkClick(uint32_t& outButton) {
+    if (!isConnected()) return false;
+    const uint32_t cur = bridge_->clickSequence.load(std::memory_order_acquire);
+    if (cur > lastClickSeq_) {
+        lastClickSeq_ = cur;
+        outButton = bridge_->clickButton.load(std::memory_order_relaxed);
+        return true;
+    }
+    return false;
 }
 
 }  // namespace mousepet

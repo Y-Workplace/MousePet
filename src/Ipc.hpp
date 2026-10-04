@@ -1,10 +1,30 @@
 // Unix-socket helpers: Hyprland IPC (cursor position) and the MousePet control socket.
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
+#include "SharedBridge.hpp"
 
 namespace mousepet {
+
+/** Zero-latency shared memory client connected to the Hyprland companion hook plugin. */
+class PetBridgeClient {
+public:
+    PetBridgeClient() = default;
+    ~PetBridgeClient();
+    bool init();
+    bool isConnected();
+    std::optional<std::pair<float, float>> queryPos();
+    bool checkClick(uint32_t& outButton);
+
+private:
+    SharedPetBridge* bridge_ = nullptr;
+    int fd_ = -1;
+    uint32_t lastClickSeq_ = 0;
+    void disconnect();
+};
 
 /** Reads the global cursor position (layout/logical coordinates) through Hyprland's IPC socket. */
 class HyprlandCursor {
