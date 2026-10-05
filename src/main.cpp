@@ -237,16 +237,16 @@ struct Daemon {
             return true;
         }
         bool ok = false;
-        // First priority: instant zero-latency shared memory bridge from Hyprland plugin
-        auto bp = bridge.queryPos();
-        if (bp) {
-            x = bp->first; y = bp->second;
+        // Priority 1: Hyprland socket IPC query ("cursorpos") - always live and accurate across all monitors
+        auto p = cursor.query();
+        if (p) {
+            x = p->first; y = p->second;
             ok = true;
         } else {
-            // Fallback: Hyprland socket query
-            auto p = cursor.query();
-            if (p) {
-                x = p->first; y = p->second;
+            // Priority 2: SHM bridge position if socket is temporarily busy
+            auto bp = bridge.queryPos();
+            if (bp) {
+                x = bp->first; y = bp->second;
                 ok = true;
             }
         }
