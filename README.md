@@ -54,6 +54,23 @@ If dependencies are already installed, use `bash install.sh --no-deps`.
 For a custom prefix: `bash install.sh --prefix "$HOME/apps/mousepet"`.
 Use `--no-path` if you prefer to manage PATH yourself.
 
+### Prebuilt release
+
+Download the Linux x86-64 archive from [Releases](https://github.com/Y-Workplace/MousePet/releases/latest).
+Extract it, open a terminal in the extracted directory, and install without compiling:
+
+```sh
+bash install.sh --skip-build --no-deps
+export PATH="$HOME/.local/bin:$PATH"
+mousepet run
+```
+
+The v0.3.0 prebuilt archive targets current Arch/CachyOS with **glibc 2.43+**,
+**libstdc++ providing GLIBCXX_3.4.35**, Wayland, Cairo, and LuaJIT. Its plugin targets
+**Hyprland 0.56.2 with the matching build hash**. It is not a portable binary for
+older distributions. Use the source installer above when these requirements do
+not match your system. The release includes SHA-256 checksums.
+
 ## Start automatically with Hyprland
 
 The easy way:
