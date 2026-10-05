@@ -84,6 +84,7 @@ bool HyprlandCursor::init() {
         struct dirent* ent;
         time_t bestTime = 0;
         std::string bestPath;
+        std::string bestSig;
         while ((ent = readdir(d)) != nullptr) {
             if (ent->d_name[0] == '.') continue;
             std::string cand = hdir + "/" + ent->d_name + "/.socket.sock";
@@ -92,12 +93,14 @@ bool HyprlandCursor::init() {
                 if (st.st_mtime >= bestTime) {
                     bestTime = st.st_mtime;
                     bestPath = cand;
+                    bestSig = ent->d_name;
                 }
             }
         }
         closedir(d);
         if (!bestPath.empty()) {
             path_ = bestPath;
+            setenv("HYPRLAND_INSTANCE_SIGNATURE", bestSig.c_str(), 1);
             return true;
         }
     }
@@ -158,12 +161,7 @@ bool PetBridgeClient::isConnected() const {
         const_cast<PetBridgeClient*>(this)->disconnect();
         return false;
     }
-    const uint64_t now = getNowMs();
-    const uint64_t lastHb = bridge_->lastHeartbeatMs.load(std::memory_order_relaxed);
-    if (!bridge_->isPluginActive.load(std::memory_order_relaxed) || (now > lastHb && now - lastHb > 8000)) {
-        return false;
-    }
-    return true;
+    return bridge_->isPluginActive.load(std::memory_order_relaxed);
 }
 
 std::optional<std::pair<float, float>> PetBridgeClient::queryPos() const {

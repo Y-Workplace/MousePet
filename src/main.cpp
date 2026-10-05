@@ -457,8 +457,9 @@ int run(int argc, char** argv) {
     }
     dm.settings.applyTo(dm.pet);
 
-    // Auto-load Hyprland companion hook plugin for click burst events if on Hyprland
+    // Detect Hyprland session and auto-load companion hook plugin for clicks/offsets
     if (!dm.demo) {
+        dm.cursor.init();
         dm.bridge.init();
         if (!dm.bridge.isConnected()) {
             std::string plugPath = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/lib/mousepet-hyprland.so";

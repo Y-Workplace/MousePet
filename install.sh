@@ -6,6 +6,7 @@ PREFIX="${PREFIX:-$HOME/.local}"
 
 echo "Compilando MousePet..."
 make -C "$DIR" -j"$(nproc)"
+make -C "$DIR" plugin
 
 echo "Instalando em $PREFIX/bin/mousepet e $PREFIX/bin/cursorpet..."
 mkdir -p "$PREFIX/bin"
