@@ -87,6 +87,7 @@ public:
         cairo_save(cr);
         cairo_translate(cr, flameTilt_ * 2.0f, -0.5);
         cairo_rotate(cr, flameTilt_);
+        cairo_scale(cr, 1.f + b.burst * 0.18f, 1.f + b.burst * 0.55f);
 
         // Outer Flame (Warm orange)
         cairo_new_path(cr);
@@ -182,7 +183,7 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 44 * pet.param("size", 1.0f));
+        addBox(pet, b, (44 + 45 * pet.body.burst) * pet.param("size", 1.0f));
     }
 };
 
@@ -190,7 +191,7 @@ static struct LanternRegistrar {
     LanternRegistrar() {
         registerAccessory({"lantern", "Lanterna Medieval", rgb(0xf59e0b),
                            CoreConfig{60, 0.48f, 0.90f, 0.28f},
-                           hints({{"orbitX", 38}, {"orbitY", -18}, {"sway", 4.0f}, {"lift", 0.05f}, {"kick", 4.5f}, {"sparks", 14}}),
+                           hints({{"orbitX", 38}, {"orbitY", -18}, {"sway", 4.0f}, {"lift", 0.05f}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0x27272a), rgb(0x71717a), 2.0f},
                            ParticleStyle{rgb(0xf59e0b), 2.2f, -0.04f}, // warm embers float up
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

@@ -15,7 +15,7 @@ const std::vector<AccessoryDef>& accessories();
 const AccessoryDef* findAccessory(std::string_view id);
 bool registerAccessory(AccessoryDef def);
 
-/** Scans ~/.config/mousepet/accessories and ./accessories for Lua scripts and C++ sources/plugins. */
+/** Load packaged accessories, user accessories, and the optional explicit accessory directory. */
 void loadDynamicAccessories();
 
 template <class T>

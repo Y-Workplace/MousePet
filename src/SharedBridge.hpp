@@ -3,12 +3,28 @@
 #include <atomic>
 #include <cstdint>
 #include <chrono>
+#include <cstdlib>
+#include <string>
 
 #ifndef MOUSEPET_SHM_PATH
 #define MOUSEPET_SHM_PATH "/mousepet_bridge_shm"
 #endif
 
 constexpr const char* MOUSEPET_SHM_NAME = MOUSEPET_SHM_PATH;
+// Keep nested compositors and separate sessions from sharing cursor/click events.
+inline std::string mousepetBridgeName() {
+    const char* session = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
+    std::string name = MOUSEPET_SHM_NAME;
+    if (session && *session) {
+        name += "_";
+        for (const unsigned char c : std::string(session))
+            name += ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                     (c >= '0' && c <= '9') || c == '_') ? char(c) : '_';
+    }
+    return name;
+}
+
+constexpr uint64_t MOUSEPET_HEARTBEAT_TIMEOUT_MS = 5000;
 constexpr uint32_t MOUSEPET_BRIDGE_MAGIC = 0x50455431;  // 'PET1'
 
 struct alignas(64) SharedPetBridge {

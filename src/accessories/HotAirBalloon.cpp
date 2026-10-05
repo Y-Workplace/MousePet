@@ -8,6 +8,8 @@ class HotAirBalloon final : public Accessory {
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
+        // Burner heats the envelope gradually instead of giving it an instant kick.
+        b.vy -= b.burst * 0.22f;
         // Warm air buoyancy
         b.vy += std::sin(pet.time * 2.5f) * 0.02f;
         burner_ = 0.8f + std::sin(pet.time * 8.0f) * 0.2f + b.burst * 1.5f;
@@ -142,7 +144,7 @@ static struct HotAirRegistrar {
     HotAirRegistrar() {
         registerAccessory({"hotair", "Balão de Ar Quente", rgb(0xf97316),
                            CoreConfig{85, 0.38f, 0.92f, 0.20f},
-                           hints({{"orbitX", 18}, {"orbitY", -80}, {"sway", 6}, {"lift", -0.06f}, {"kick", 5}, {"sparks", 16}}),
+                           hints({{"orbitX", 18}, {"orbitY", -80}, {"sway", 6}, {"lift", -0.06f}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0xa8a29e), rgb(0xf5f5f4), 1.8f},
                            ParticleStyle{rgb(0xfb923c), 2.2f, -0.03f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

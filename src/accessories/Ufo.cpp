@@ -9,8 +9,8 @@ class Ufo final : public Accessory {
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
-        lightRot_ += 0.08f;
-        beamPulse_ += 0.06f;
+        lightRot_ += 0.08f + b.burst * 0.22f;
+        beamPulse_ += 0.06f + b.burst * 0.10f;
 
         // Tractor beam absorption suction: matter sucked UP into the saucer
         if (b.burst > 0.05f) {
@@ -87,7 +87,7 @@ public:
             float depth = std::sin(ang);
             if (depth >= 0.0f) continue;
             float lx = std::cos(ang) * 18.0f;
-            float ly = -1.0f + depth * 4.8f;
+            float ly = -1.0f - depth * 4.8f;
             source(cr, lightColors[i % 5]);
             circle(cr, lx, ly, 1.2);
             cairo_fill(cr);
@@ -151,7 +151,7 @@ public:
             float depth = std::sin(ang);
             if (depth < 0.0f) continue;
             float lx = std::cos(ang) * 18.0f;
-            float ly = -1.0f + depth * 4.8f;
+            float ly = -1.0f - depth * 4.8f;
             float r = 1.6f + depth * 0.5f;
 
             glow(cr, lx, ly, 0, r * 2.8, {{0, lightColors[i % 5]}, {1, rgba(255, 255, 255, 0)}}, CAIRO_OPERATOR_SCREEN, 0.7);
@@ -166,7 +166,7 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 44 * pet.param("size", 1.0f));
+        addBox(pet, b, 48 * pet.param("size", 1.0f));
     }
 };
 
@@ -174,7 +174,7 @@ static struct UfoRegistrar {
     UfoRegistrar() {
         registerAccessory({"ufo", "Disco Voador (OVNI)", rgb(0x4ade80),
                            CoreConfig{60, 0.50f, 0.92f, 0.16f},
-                           hints({{"orbitX", 40}, {"orbitY", -30}, {"sway", 4.5f}, {"lift", -0.03f}, {"kick", 5}, {"sparks", 0}}),
+                           hints({{"orbitX", 40}, {"orbitY", -30}, {"sway", 4.5f}, {"lift", -0.03f}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0x475569), rgb(0x4ade80), 2.0f},
                            ParticleStyle{rgb(0x4ade80), 2.4f, -0.04f}, // suction particles drift upwards
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

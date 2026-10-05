@@ -5,7 +5,7 @@ DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$DIR/build/mousepet"
 
 if [[ ! -f "$BIN" ]]; then
-    echo "[mousepet] Binário não encontrado. Compilando com make..."
+    echo "[mousepet] Binary not found. Building with make..."
     make -C "$DIR" -j"$(nproc)"
 fi
 

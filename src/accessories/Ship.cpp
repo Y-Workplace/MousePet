@@ -30,7 +30,7 @@ public:
         } else {
             float diff = targetAngle - currentAngle_;
             diff -= float(TAU) * std::round(diff / float(TAU));
-            currentAngle_ += diff * (sp > 1.0f ? 0.22f : 0.10f);
+            currentAngle_ = std::remainder(currentAngle_ + diff * (sp > 1.0f ? 0.22f : 0.10f), float(TAU));
         }
 
         // Ion engine exhaust trail shooting out from the rear thruster
@@ -48,6 +48,9 @@ public:
     }
 
     void onBurst(Pet& pet) override {
+        // Engines boost along the nose, leaving exhaust behind instead of hopping up.
+        pet.body.vx += std::sin(currentAngle_) * 6.f;
+        pet.body.vy -= std::cos(currentAngle_) * 6.f;
         // Warp ring shockwave
         for (int i = 0; i < 18; i++) {
             float a = i * (TAU / 18);
@@ -175,7 +178,7 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 36 * pet.param("size", 1.0f));
+        addBox(pet, b, (42 + 22 * pet.body.burst) * pet.param("size", 1.0f));
     }
 };
 
@@ -183,7 +186,7 @@ static struct ShipRegistrar {
     ShipRegistrar() {
         registerAccessory({"ship", "Nave Espacial", rgb(0x38bdf8),
                            CoreConfig{60, 0.55f, 0.93f, 0.15f},
-                           hints({{"orbitX", 45}, {"orbitY", -25}, {"sway", 4}, {"tilt", 0.0f}, {"tiltVel", 0.0f}, {"kick", 5}, {"sparks", 16}}),
+                           hints({{"orbitX", 45}, {"orbitY", -25}, {"sway", 4}, {"tilt", 0.0f}, {"tiltVel", 0.0f}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0x334155), rgb(0x38bdf8), 2.0f},
                            ParticleStyle{rgb(0x38bdf8), 2.2f, 0.0f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

@@ -6,15 +6,18 @@ class ChineseLantern final : public Accessory {
     float sway_ = 0.0f;
     float tasselAngle_ = 0.0f;
     float glowPulse_ = 0.0f;
+    float festivalAge_ = 100.f;
 
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         sway_ += 0.08f;
+        festivalAge_ = std::min(festivalAge_ + 1.f, 100.f);
         glowPulse_ += 0.05f;
 
         // Dangling tassel and bell inertia
-        const float targetTassel = std::clamp(-b.vx * 0.12f, -0.75f, 0.75f);
+        const float targetTassel = std::clamp(-b.vx * 0.12f, -0.75f, 0.75f) +
+                                  std::sin(festivalAge_ * 0.3f) * std::exp(-festivalAge_ * 0.07f) * 0.7f;
         tasselAngle_ += (targetTassel - tasselAngle_) * 0.18f;
 
         // Warm festival ember / petal particles drifting gently
@@ -26,6 +29,7 @@ public:
     }
 
     void onBurst(Pet& pet) override {
+        festivalAge_ = 0.f;
         // Starburst of festival gold and crimson firework sparks
         for (int i = 0; i < 18; i++) {
             float a = pet.random() * TAU;
@@ -40,7 +44,8 @@ public:
         const double glowStrength = 0.85 + std::sin(glowPulse_) * 0.15 + b.burst * 1.3;
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle * 0.4f);
+        cairo_rotate(cr, b.angle * 0.4f +
+                         std::sin(festivalAge_ * 0.18f) * std::exp(-festivalAge_ * 0.065f) * 0.22f);
         cairo_scale(cr, sz, sz);
 
         // 1. Warm Radiant Festival Glow
@@ -213,7 +218,7 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 46 * pet.param("size", 1.0f));
+        addBox(pet, b, (46 + 43 * pet.body.burst) * pet.param("size", 1.0f));
     }
 };
 
@@ -221,7 +226,7 @@ static struct ChineseLanternRegistrar {
     ChineseLanternRegistrar() {
         registerAccessory({"chineselantern", "Lanterna Chinesa", rgb(0xdc2626),
                            CoreConfig{60, 0.50f, 0.90f, 0.22f},
-                           hints({{"orbitX", 40}, {"orbitY", -22}, {"sway", 4.5f}, {"lift", 0.02f}, {"kick", 5.0f}, {"sparks", 16}}),
+                           hints({{"orbitX", 40}, {"orbitY", -22}, {"sway", 4.5f}, {"lift", 0.02f}, {"kick", 1.0f}, {"sparks", 0}}),
                            RopeStyle{rgb(0x991b1b), rgb(0xfacc15), 1.8f},
                            ParticleStyle{rgb(0xfbbf24), 2.2f, 0.02f}, // golden sparks and festival glow
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

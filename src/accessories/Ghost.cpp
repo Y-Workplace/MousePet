@@ -3,15 +3,22 @@
 namespace mousepet {
 
 class Ghost final : public Accessory {
+    float frightAge_ = 100.f;
 public:
+    void onBurst(Pet& pet) override {
+        frightAge_ = 0.f;
+        pet.body.vx += (pet.mouse.x < pet.body.x ? 1.f : -1.f) * 2.8f;
+    }
+    void update(Pet&) override { frightAge_ = std::min(frightAge_ + 1.f, 100.f); }
     void render(cairo_t* cr, const Pet& pet) override {
         const Body& b = pet.body; const Mouse& m = pet.mouse;
         cairo_translate(cr, b.x, b.y);
         glow(cr, 0, 0, 4, 28, {{0, rgba(226, 232, 240, 0.28)}, {1, rgba(226, 232, 240, 0)}});
 
-        cairo_rotate(cr, b.angle);
-        const double s = 1 + b.burst * 0.3;
-        cairo_scale(cr, s, s);
+        const float shiver = std::sin(frightAge_ * 1.3f) * std::exp(-frightAge_ * 0.10f);
+        cairo_rotate(cr, b.angle + shiver * 0.12f);
+        // Startled stretch gives way to a little shiver instead of uniform growth.
+        cairo_scale(cr, 1 - b.burst * 0.16, 1 + b.burst * 0.28);
 
         // body (drawn into a group so the opacity applies to the whole sprite, like the cached canvas)
         cairo_push_group(cr);
@@ -63,7 +70,7 @@ public:
 static struct GhostRegistrar {
     GhostRegistrar() {
         registerAccessory({"ghost", "Ghost", rgb(0xe2e8f0), CoreConfig{60, 0.4f, 0.91f, 0.2f},
-                           hints({{"orbitX", 42}, {"orbitY", -22}, {"sway", 7}, {"tilt", 0}, {"tiltVel", 0.05f}}),
+                           hints({{"orbitX", 42}, {"orbitY", -22}, {"sway", 7}, {"tilt", 0}, {"tiltVel", 0.05f}, {"kick", 2.5f}, {"sparks", 0}}),
                            RopeStyle{rgb(0x64748b), rgb(0xe2e8f0), 2.2f}, ParticleStyle{rgb(0xcbd5e1), 2, 0},
                            {{"opacity", "Opacity", 0.3f, 1, 0.05f, 0.85f}},
                            makeAccessory<Ghost>()});

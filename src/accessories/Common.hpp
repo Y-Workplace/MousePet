@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 
 #include <cairo.h>
 #include <cmath>
@@ -56,6 +57,26 @@ inline void glow(cairo_t* cr, double x, double y, double r0, double r1,
     cairo_paint_with_alpha(cr, alpha);
     cairo_restore(cr);
     cairo_pattern_destroy(g);
+}
+
+inline void roundedRect(cairo_t* cr, double x, double y, double w, double h, double r) {
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, x + w - r, y + r, r, -PI / 2, 0);
+    cairo_arc(cr, x + w - r, y + h - r, r, 0, PI / 2);
+    cairo_arc(cr, x + r, y + h - r, r, PI / 2, PI);
+    cairo_arc(cr, x + r, y + r, r, PI, PI * 1.5);
+    cairo_close_path(cr);
+}
+
+inline void companionPose(cairo_t* cr, const Pet& pet, float extraAngle = 0.f) {
+    cairo_translate(cr, pet.body.x, pet.body.y);
+    cairo_rotate(cr, pet.body.angle + extraAngle);
+    const float size = pet.param("size", 1.f);
+    cairo_scale(cr, size, size);
+}
+
+inline float dampedMotion(float age, float frequency, float damping) {
+    return std::sin(age * frequency) * std::exp(-age * damping);
 }
 
 inline void addBox(const Pet& pet, Bounds& b, float r) {

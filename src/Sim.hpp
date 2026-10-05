@@ -74,6 +74,8 @@ struct CoreConfig {
     float ropeLength = 55.f, stiffness = 0.45f, drag = 0.90f, ropeGravity = 0.30f;
 };
 
+constexpr float MAX_BODY_BANK = 0.85f; // sprite-specific spins remain independent
+
 struct BodyHints {
     float orbitX = 38, orbitY = -24;  // rest point relative to the cursor
     float sway = 4;                   // vertical bobbing

@@ -6,12 +6,14 @@ class PirateShip final : public Accessory {
     float wavePhase_ = 0.0f;
     float flagWave_ = 0.0f;
     float tilt_ = 0.0f;
+    float recoilAge_ = 100.f;
 
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
         wavePhase_ += 0.10f;
+        recoilAge_ = std::min(recoilAge_ + 1.f, 100.f);
         flagWave_ += 0.25f + sp * 0.1f;
 
         // Sea spray / wake bubbles at the keel
@@ -28,6 +30,8 @@ public:
     }
 
     void onBurst(Pet& pet) override {
+        recoilAge_ = 0.f;
+        pet.body.vx -= 2.8f;
         // Broadside cannon salvo! Smoke and fiery cannon shot
         for (int i = 0; i < 18; i++) {
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
@@ -43,7 +47,8 @@ public:
         const double waveBob = std::sin(wavePhase_) * 2.5;
 
         cairo_translate(cr, b.x, b.y + waveBob);
-        cairo_rotate(cr, b.angle * 0.3f + tilt_);
+        cairo_rotate(cr, b.angle * 0.3f + tilt_ +
+                         std::sin(recoilAge_ * 0.25f) * std::exp(-recoilAge_ * 0.08f) * 0.28f);
         cairo_scale(cr, sz, sz);
 
         // 1. Water Wake / Mist at the Keel
@@ -228,7 +233,7 @@ static struct PirateShipRegistrar {
     PirateShipRegistrar() {
         registerAccessory({"pirateship", "Navio Pirata", rgb(0x1c1917),
                            CoreConfig{65, 0.50f, 0.90f, 0.22f},
-                           hints({{"orbitX", 42}, {"orbitY", -22}, {"sway", 5.0f}, {"lift", 0.02f}, {"kick", 5.0f}, {"sparks", 16}}),
+                           hints({{"orbitX", 42}, {"orbitY", -22}, {"sway", 5.0f}, {"lift", 0.02f}, {"kick", 0.0f}, {"sparks", 0}}),
                            RopeStyle{rgb(0x451a03), rgb(0xd97706), 2.0f},
                            ParticleStyle{rgb(0x38bdf8), 2.2f, 0.05f}, // sea foam spray
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

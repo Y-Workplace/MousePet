@@ -7,10 +7,19 @@ class Star final : public Accessory {
     unsigned tick_ = 0;
 
 public:
+    void onBurst(Pet& pet) override {
+        const int points = int(std::lround(pet.param("points", 5)));
+        for (int i = 0; i < points; i++) {
+            const float a = rot_ - PI / 2 + i * TAU / points;
+            for (int j = 0; j < 3; j++)
+                pet.emit(pet.body.x + std::cos(a) * 14.f, pet.body.y + std::sin(a) * 14.f,
+                         std::cos(a) * (1.2f + j * 0.7f), std::sin(a) * (1.2f + j * 0.7f), 0.9f);
+        }
+    }
     void update(Pet& pet) override {
         const Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
-        rot_ += (0.02f + sp * 0.01f + b.burst * 0.2f) * pet.param("spin", 1);
+        rot_ = std::fmod(rot_ + (0.02f + sp * 0.01f + b.burst * 0.2f) * pet.param("spin", 1), float(TAU));
         if (sp > 1.5f && (++tick_ & 1)) {  // sparkle trail
             pet.emit(b.x, b.y, -b.vx * 0.15f + (pet.random() - 0.5f) * 0.6f,
                      -b.vy * 0.15f + (pet.random() - 0.5f) * 0.6f, 0.7f);
@@ -51,7 +60,7 @@ public:
 static struct StarRegistrar {
     StarRegistrar() {
         registerAccessory({"star", "Star", rgb(0xfde047), CoreConfig{60, 0.5f, 0.88f, 0.2f},
-                           hints({{"orbitX", 34}, {"orbitY", -30}, {"sway", 5}, {"kick", 5}, {"tilt", 0}}),
+                           hints({{"orbitX", 34}, {"orbitY", -30}, {"sway", 5}, {"kick", 5}, {"tilt", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0x92710c), rgb(0xfde047), 2.2f}, ParticleStyle{rgb(0xfde047), 2.4f, 0},
                            {{"points", "Points", 4, 8, 1, 5}, {"spin", "Spin", 0, 3, 0.1f, 1}},
                            makeAccessory<Star>()});

@@ -4,9 +4,9 @@ namespace mousepet {
 
 class Allay final : public Accessory {
     float wingPhase_ = 0.0f;
-    float dance_ = 0.0f;
+    float burstAge_ = 100.f;
 
-    // Authentic 28x22 pixel-art sprite matching Minecraft Allay reference
+    // Original 28x22 pixel-art interpretation of an Allay
     static constexpr int SPR_W = 28;
     static constexpr int SPR_H = 22;
 
@@ -74,10 +74,10 @@ public:
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
         wingPhase_ += 0.35f + sp * 0.15f + b.burst * 0.45f;
-        dance_ += 0.05f;
+        burstAge_ = std::min(burstAge_ + 1.f, 100.f);
 
         // Minecraft fairy sparkles floating upward
-        if (pet.random() < 0.20f || b.burst > 0.1f) {
+        if (pet.random() < 0.20f || (b.burst > 0.1f && pet.random() < 0.25f)) {
             float ox = (pet.random() - 0.5f) * 18.0f;
             float oy = (pet.random() - 0.5f) * 16.0f;
             pet.emit(b.x + ox, b.y + oy,
@@ -86,9 +86,10 @@ public:
     }
 
     void onBurst(Pet& pet) override {
-        // Starburst of musical notes and diamond glints
-        for (int i = 0; i < 20; i++) {
-            float a = pet.random() * TAU;
+        burstAge_ = 0.f;
+        // A delighted hop, with wing flutter and glints trailing below the hands.
+        for (int i = 0; i < 8; i++) {
+            float a = PI * 0.15f + pet.random() * PI * 0.7f;
             float spd = 1.4f + pet.random() * 2.2f;
             pet.emit(pet.body.x, pet.body.y, std::cos(a) * spd, std::sin(a) * spd, 1.2f);
         }
@@ -100,7 +101,8 @@ public:
         const float flap = std::sin(wingPhase_) * 1.5f;
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle * 0.35f);
+        const float joy = std::sin(burstAge_ * 0.30f) * std::exp(-burstAge_ * 0.08f);
+        cairo_rotate(cr, b.angle * 0.35f + joy * 0.16f);
         cairo_scale(cr, sz, sz);
 
         // 1. Ambient Luminous Cyan Allay Glow
@@ -136,34 +138,43 @@ public:
             }
         }
 
-        // 3. Minecraft Item: Diamond held by the Allay
-        // Idle: hands hold item near chest (0, 7)
-        // Burst: Allay joyfully raises the diamond high above head (0, -16)!
-        const float burstLift = b.burst * 22.0f;
-        const float itemX = -4.0f * P;
-        const float itemY = (6.0f - burstLift) * P;
-
-        // Diamond radiant gleam on burst
-        if (b.burst > 0.05f) {
-            glow(cr, 0, itemY + 4.0f * P, 0, 20.0f * b.burst,
-                 {{0, rgba(140, 246, 250, 0.95)}, {0.5, rgba(44, 226, 238, 0.5)}, {1, rgba(0, 85, 119, 0)}},
-                 CAIRO_OPERATOR_SCREEN, b.burst);
-        }
-
-        // Render 8x8 Diamond
-        for (int dy = 0; dy < 8; dy++) {
-            for (int dx = 0; dx < 8; dx++) {
-                const uint8_t cidx = DIAMOND[dy][dx];
-                if (cidx == 0) continue;
-                source(cr, DIAMOND_PALETTE[cidx]);
-                cairo_rectangle(cr, itemX + dx * P, itemY + dy * P, P, P);
+        // Larger item centered between the palms, held against the chest.
+        // Its reveal/fade stays independent from the body's hop.
+        if (b.burst > 0.f && burstAge_ < 52.f) {
+            const float alpha = std::clamp((52.f - burstAge_) / 10.f, 0.f, 1.f);
+            const float itemPixel = P * 1.3f;
+            const float centerX = originX + 12.f * P;
+            const float centerY = originY + 18.f * P;
+            const float handY = originY + 17.f * P;
+            const float itemX = centerX - 4.f * itemPixel;
+            const float itemY = centerY - 4.f * itemPixel;
+            glow(cr, centerX, centerY, 0, 14,
+                 {{0, rgba(140, 246, 250, 0.65)}, {1, rgba(0, 85, 119, 0)}},
+                 CAIRO_OPERATOR_SCREEN, alpha * (0.65f + 0.25f * std::sin(burstAge_ * 0.5f)));
+            for (int dy = 0; dy < 8; dy++) {
+                for (int dx = 0; dx < 8; dx++) {
+                    const uint8_t cidx = DIAMOND[dy][dx];
+                    if (cidx == 0) continue;
+                    source(cr, DIAMOND_PALETTE[cidx], alpha);
+                    cairo_rectangle(cr, itemX + dx * itemPixel, itemY + dy * itemPixel, itemPixel, itemPixel);
+                    cairo_fill(cr);
+                }
+            }
+            // Both palms overlap the edges so the Allay visibly grips the item.
+            for (float handColumn : {7.f, 17.f}) {
+                const float handX = originX + handColumn * P;
+                source(cr, PALETTE[2], alpha);
+                cairo_rectangle(cr, handX - P, handY - P, 2.f * P, 3.f * P);
+                cairo_fill(cr);
+                source(cr, PALETTE[6], alpha);
+                cairo_rectangle(cr, handX - P, handY, 2.f * P, 2.f * P);
                 cairo_fill(cr);
             }
         }
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 38 * pet.param("size", 1.0f));
+        addBox(pet, b, 48 * pet.param("size", 1.0f));
     }
 };
 
@@ -171,9 +182,9 @@ static struct AllayRegistrar {
     AllayRegistrar() {
         registerAccessory({"allay", "Allay (Minecraft)", rgb(0x38bdf8),
                            CoreConfig{60, 0.45f, 0.91f, 0.18f},
-                           hints({{"orbitX", 36}, {"orbitY", -28}, {"sway", 5.5f}, {"lift", -0.04f}, {"kick", 5}, {"sparks", 16}}),
+                           hints({{"orbitX", 36}, {"orbitY", -28}, {"sway", 5.5f}, {"lift", -0.04f}, {"kick", 7}, {"sparks", 0}}),
                            RopeStyle{rgb(0x0284c7), rgb(0x7dd3fc), 1.8f},
-                           ParticleStyle{rgb(0x38bdf8), 2.2f, -0.04f}, // sparkles float upward
+                           ParticleStyle{rgb(0x38bdf8), 1.2f, -0.04f}, // sparkles float upward
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},
                            makeAccessory<Allay>()});
     }

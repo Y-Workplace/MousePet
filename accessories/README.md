@@ -1,58 +1,47 @@
-# Acessórios do MousePet / CursorPet
+# Custom MousePet accessories
 
-O MousePet possui arquitetura modular onde cada acessório tem seu próprio arquivo separado, além de suporte a criação dinâmica de pets usando **Lua (amigável e rápido)** ou **C++ (auto-compilado na execução)**.
+MousePet loads shipped examples from its installation directory and user
+accessories from `$XDG_CONFIG_HOME/mousepet/accessories` (normally
+`~/.config/mousepet/accessories`). User IDs can override shipped examples.
+Only load code you trust. These accessories run inside the MousePet process.
 
-## Como Adicionar Novos Acessórios
+An optional `MOUSEPET_ACCESSORY_DIR` adds another directory. Repository examples
+are opt-in: `MOUSEPET_ACCESSORY_DIR="$PWD/accessories" mousepet run`.
+Restart MousePet after adding or changing an accessory.
 
-Você pode colocar seus scripts ou fontes em:
-1. `~/.config/mousepet/accessories/` (global do seu usuário)
-2. `./accessories/` (local no diretório de execução)
+## Lua
 
-### Método 1: Em Lua (Mais Amigável)
-Basta criar um arquivo com extensão `.lua` (ex: `meupet.lua`):
+Copy `bubble.lua` to your user accessory directory as a starting point. It is
+also installed as a shipped example. Each script returns a definition with
+an ID, parameters, and optional update/onBurst hooks, plus a render hook.
 
 ```lua
 return {
-    id = "meupet",
-    name = "Meu Pet Amigável",
+    id = "mycompanion",
+    name = "My Companion",
     color = 0x60a5fa,
-    rope = { color = 0x38bdf8, width = 2.0 },
-    particle = { color = 0x93c5fd, size = 2.5, gravity = -0.04 },
     body = { orbitX = 40, orbitY = -28, sway = 6 },
-
-    update = function(pet)
-        -- forças adicionais ou física
-    end,
-
-    onBurst = function(pet)
-        -- disparado quando o usuário clica com o mouse
-        for i = 1, 10 do
-            local a = pet:random() * 6.28
-            pet:emit(pet.body.x, pet.body.y, math.cos(a) * 2, math.sin(a) * 2, 1.0)
-        end
-    end,
-
     render = function(cr, pet)
-        -- desenha usando comandos cairo do Lua
-        cr:set_source_rgba(1.0, 0.5, 0.2, 0.9)
+        cr:set_source_rgba(0.3, 0.6, 1.0, 0.9)
         cr:circle(pet.body.x, pet.body.y, 14)
         cr:fill()
-    end
+    end,
 }
 ```
 
-O MousePet carrega o arquivo `.lua` automaticamente ao iniciar ou reiniciar!
+See `src/accessories/LuaLoader.cpp` and the complete `bubble.lua` example for the
+available API. Keep rendering inside the declared/default bounds.
 
-### Método 2: Em C++ (Compilação Automática na Execução)
-Basta colocar um arquivo `.cpp` (ex: `meupet.cpp`).
-Quando o MousePet for executado, ele verifica se existe o `.so` correspondente ou se o `.cpp` foi modificado.
-Se necessário, o MousePet compila automaticamente o `.cpp` para `.so` usando `g++` e carrega via `dlopen` sem que você precise compilar manualmente!
+## C++
 
-```cpp
-#include <cairo.h>
-#include "accessories/Common.hpp"
+Native repository companions belong in `src/accessories/` and build with Make.
+For user companions, MousePet can compile `.cpp` files into adjacent `.so` files
+and load a `mousepet_accessory` factory returning an `AccessoryDef`. It needs g++,
+pkg-config and Cairo development files. The installer provides MousePet headers
+under `~/.local/include/mousepet`. Include `accessories/Common.hpp` and follow a
+native companion's factory structure.
 
-extern "C" mousepet::AccessoryDef mousepet_accessory() {
-    // Retorna a definição do acessório
-}
-```
+The C++ interface is not a stable binary ABI. Rebuild custom `.so` files after
+MousePet or compiler upgrades. Avoid loading a plugin built for a different
+MousePet version. A custom C++ accessory is separate from the Hyprland hook
+plugin, which must match Hyprland's own ABI.

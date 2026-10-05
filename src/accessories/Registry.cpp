@@ -1,6 +1,8 @@
 #include "Registry.hpp"
 #include "LuaLoader.hpp"
 #include "CppLoader.hpp"
+#include "../Process.hpp"
+#include <filesystem>
 
 #include <cstdlib>
 #include <sys/stat.h>
@@ -51,10 +53,12 @@ void loadDynamicAccessories() {
     } else if (home && *home) {
         userDir = std::string(home) + "/.config/mousepet/accessories";
     }
+    // Shipped examples are loaded first; user accessories can override them.
+    const auto binary = std::filesystem::path(executablePath());
+    searchDirs.push_back((binary.parent_path().parent_path() / "share/mousepet/accessories").string());
     if (!userDir.empty()) searchDirs.push_back(userDir);
-
-    // 2. Project local directory: ./accessories
-    searchDirs.push_back("./accessories");
+    // Project folders are opt-in: never execute accessories from arbitrary CWDs.
+    if (const char* extra = std::getenv("MOUSEPET_ACCESSORY_DIR"); extra && *extra) searchDirs.push_back(extra);
 
     for (const auto& dir : searchDirs) {
         if (access(dir.c_str(), F_OK) == 0) {

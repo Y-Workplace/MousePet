@@ -214,12 +214,15 @@ void Pet::step() {
     b.vx -= rope.pullX * config.stiffness * 0.5f;
     b.vy -= rope.pullY * config.stiffness * 0.5f;
 
-    // Tilt (normalised angular difference: no 360° spins when crossing ±pi)
-    float raw = std::atan2(b.y - rope.y[LAST - 1], b.x - rope.x[LAST - 1]) + h.tiltBase;
-    raw -= TAU * std::round(raw / TAU);
-    float d = raw * h.tilt - b.vx * h.tiltVel - b.angle;
-    d -= TAU * std::round(d / TAU);
-    b.angle += d * h.tiltEase;
+    // The rope supplies an axis, not a full sprite rotation. Scaling a wrapped
+    // angle by a fractional tilt creates discontinuities at +/-pi and can leave
+    // upright companions inverted. Fold the axis, limit banking, then ease it.
+    const float dx = b.x - rope.x[LAST - 1], dy = b.y - rope.y[LAST - 1];
+    const float raw = std::remainder(std::atan2(dy, dx) + h.tiltBase, float(PI));
+    const float limit = MAX_BODY_BANK;
+    const float target = std::clamp(raw * h.tilt - b.vx * h.tiltVel, -limit, limit);
+    b.angle = std::clamp(std::remainder(b.angle, float(TAU)), -limit, limit);
+    b.angle += (target - b.angle) * std::clamp(h.tiltEase, 0.f, 1.f);
 
     guard("lateUpdate", [&] { inst_->lateUpdate(*this); });  // secondary motion
     particles.update(particleStyle.gravity);

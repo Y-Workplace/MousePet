@@ -133,7 +133,7 @@ void PetBridgeClient::disconnect() {
 
 bool PetBridgeClient::init() {
     if (bridge_) return true;
-    fd_ = shm_open(MOUSEPET_SHM_NAME, O_RDWR, 0);
+    fd_ = shm_open(mousepetBridgeName().c_str(), O_RDONLY, 0);
     if (fd_ < 0) return false;
     struct stat st{};
     if (fstat(fd_, &st) != 0 || st.st_size < (off_t)sizeof(SharedPetBridge)) {
@@ -141,7 +141,7 @@ bool PetBridgeClient::init() {
         fd_ = -1;
         return false;
     }
-    void* ptr = mmap(nullptr, sizeof(SharedPetBridge), PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    void* ptr = mmap(nullptr, sizeof(SharedPetBridge), PROT_READ, MAP_SHARED, fd_, 0);
     if (ptr == MAP_FAILED) {
         close(fd_);
         fd_ = -1;
@@ -161,7 +161,10 @@ bool PetBridgeClient::isConnected() const {
         const_cast<PetBridgeClient*>(this)->disconnect();
         return false;
     }
-    return bridge_->isPluginActive.load(std::memory_order_relaxed);
+    const uint64_t heartbeat = bridge_->lastHeartbeatMs.load(std::memory_order_relaxed);
+    const uint64_t now = getNowMs();
+    return bridge_->isPluginActive.load(std::memory_order_relaxed) && heartbeat != 0 &&
+           now >= heartbeat && now - heartbeat <= MOUSEPET_HEARTBEAT_TIMEOUT_MS;
 }
 
 std::optional<std::pair<float, float>> PetBridgeClient::queryPos() const {
@@ -190,11 +193,7 @@ bool PetBridgeClient::isCursorVisible() const {
 }
 
 bool PetBridgeClient::checkClick(uint32_t& outButton) {
-    if (!bridge_) {
-        init();
-        if (!bridge_) return false;
-    }
-    if (bridge_->magic != MOUSEPET_BRIDGE_MAGIC) return false;
+    if (!isConnected()) return false;
     const uint32_t cur = bridge_->clickSequence.load(std::memory_order_acquire);
     if (cur != lastClickSeq_) {
         lastClickSeq_ = cur;

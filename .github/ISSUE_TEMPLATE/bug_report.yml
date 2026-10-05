@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a crash, installation issue, or visual problem.
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: What happened?
+      description: Include steps to reproduce, expected behavior, and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distribution, Hyprland version, companion ID, scale, and mousepet status output. Remove private paths if needed.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: text

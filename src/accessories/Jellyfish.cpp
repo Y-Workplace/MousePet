@@ -9,12 +9,23 @@ class Jellyfish final : public Accessory {
     std::vector<Tentacle> tent_;
     float phase_ = 0;
 
+    float strokeAge_ = 100.f;
+
 public:
     explicit Jellyfish(Pet& pet) {
         for (int t = 0; t < COUNT; t++)
             tent_.push_back({(t - (COUNT - 1) / 2.f) * 5.5f, Chain(5, pet.body.x, pet.body.y)});
     }
+    void onBurst(Pet&) override { strokeAge_ = 0.f; }
     void update(Pet& pet) override {
+        strokeAge_ = std::min(strokeAge_ + 1.f, 100.f);
+        // Brief bell contraction, then a swimming jet. Tentacles follow with inertia.
+        if (strokeAge_ == 5.f) {
+            pet.body.vy -= 5.5f;
+            for (int i = 0; i < 8; i++)
+                pet.emit(pet.body.x + (pet.random() - 0.5f) * 14.f, pet.body.y + 10.f,
+                         (pet.random() - 0.5f) * 0.8f, 0.8f + pet.random(), 0.8f);
+        }
         Body& b = pet.body;
         phase_ += (0.06f + b.burst * 0.1f) * pet.param("swim", 1);
         if (std::sin(phase_) > 0.75f) b.vy -= 0.12f;  // swimming thrust
@@ -35,7 +46,8 @@ public:
         const double s = std::sin(phase_);
         cairo_translate(cr, b.x, b.y);
         cairo_rotate(cr, b.angle);
-        cairo_scale(cr, 1 - s * 0.05, 1 + s * 0.09 + b.burst * 0.25);
+        const float stroke = std::sin(strokeAge_ * 0.24f) * std::exp(-strokeAge_ * 0.07f);
+        cairo_scale(cr, 1 - s * 0.05 + stroke * 0.20, 1 + s * 0.09 - stroke * 0.22);
 
         // aura
         glow(cr, 0, -2, 2, 24, {{0, rgba(56, 189, 248, 0.4)}, {0.6, rgba(168, 85, 247, 0.15)}, {1, rgba(56, 189, 248, 0)}},
@@ -77,7 +89,7 @@ public:
 static struct JellyfishRegistrar {
     JellyfishRegistrar() {
         registerAccessory({"jellyfish", "Jellyfish", rgb(0x38bdf8), CoreConfig{},
-                           hints({{"orbitX", 38}, {"orbitY", -24}, {"sway", 4}}),
+                           hints({{"orbitX", 38}, {"orbitY", -24}, {"sway", 4}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{}, ParticleStyle{rgb(0x38bdf8), 2, 0},
                            {{"glow", "Glow", 0, 1, 0.05f, 1}, {"swim", "Pulse", 0.5f, 2, 0.1f, 1}},
                            makeAccessory<Jellyfish>()});

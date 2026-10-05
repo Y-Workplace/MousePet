@@ -5,12 +5,18 @@ namespace mousepet {
 class Firefly final : public Accessory {
     float wingVibe_ = 0.0f;
     float pulse_ = 0.0f;
+    float flashAge_ = 100.f;
 
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
-        wingVibe_ += 0.45f + sp * 0.15f;
+        flashAge_ = std::min(flashAge_ + 1.f, 100.f);
+        wingVibe_ += 0.45f + sp * 0.15f + b.burst * 0.7f;
+        if (flashAge_ < 24.f) {
+            b.vx += std::cos(flashAge_ * 0.26f) * b.burst * 0.35f;
+            b.vy += std::sin(flashAge_ * 0.26f) * b.burst * 0.35f;
+        }
         pulse_ += 0.05f;
 
         // Magical bioluminescent pollen sparks
@@ -23,6 +29,7 @@ public:
     }
 
     void onBurst(Pet& pet) override {
+        flashAge_ = 0.f;
         // Flash dispersal of glowing pollen
         for (int i = 0; i < 16; i++) {
             float a = pet.random() * TAU;
@@ -136,7 +143,7 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 34 * pet.param("size", 1.0f));
+        addBox(pet, b, (38 + 34 * pet.body.burst) * pet.param("size", 1.0f));
     }
 };
 
@@ -144,7 +151,7 @@ static struct FireflyRegistrar {
     FireflyRegistrar() {
         registerAccessory({"firefly", "Vaga-lume da Floresta", rgb(0xa3e635),
                            CoreConfig{60, 0.45f, 0.90f, 0.18f},
-                           hints({{"orbitX", 38}, {"orbitY", -24}, {"sway", 6}, {"lift", -0.04f}, {"kick", 5}, {"sparks", 16}}),
+                           hints({{"orbitX", 38}, {"orbitY", -24}, {"sway", 6}, {"lift", -0.04f}, {"kick", 0}, {"sparks", 0}}),
                            RopeStyle{rgb(0x365314), rgb(0xa3e635), 1.8f},
                            ParticleStyle{rgb(0xbef264), 2.2f, -0.02f}, // gentle floating pollen
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

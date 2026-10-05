@@ -102,6 +102,53 @@ static void testAngleWrapNoSpin() {
     CHECK(maxJump < 1.0f, "tilt jumped %.2f rad in one step", maxJump);
 }
 
+static void testUprightBanking() {
+    for (const auto& def : accessories()) {
+        Pet pet(19);
+        pet.select(def);
+        pet.place(300, 300);
+        // Recover from a formerly inverted pose or a accumulated full revolution.
+        pet.body.angle = float(TAU * 7 + 2.8);
+        for (int i = 0; i < 360; i++) {
+            const float a = i * 0.09f;
+            pet.setMouse(300 + std::cos(a) * 100, 300 + std::sin(a) * 100);
+            if (i % 45 == 0) pet.burst();
+            pet.step();
+            CHECK(std::abs(pet.body.angle) <= MAX_BODY_BANK + 0.001f,
+                  "%s lost upright posture: %.3f", def.id.c_str(), pet.body.angle);
+        }
+        for (int i = 0; i < 180; i++) pet.step();
+        CHECK(finite(pet), "%s invalid after rotation stress", def.id.c_str());
+    }
+}
+
+static void testNewAccessoryCatalog() {
+    for (const char* id : {"airship", "paperdragon", "potion", "hourglass", "windchime",
+                           "drone", "satellite", "battery", "yoyo", "plasticbag"}) {
+        int count = 0;
+        for (const auto& def : accessories()) if (def.id == id) count++;
+        CHECK(count == 1, "%s must be registered exactly once", id);
+        Pet pet(5);
+        pet.select(*findAccessory(id));
+        pet.place(200, 200);
+        pet.burst();
+        for (int i = 0; i < 70; i++) {
+            pet.step();
+            if (i % 10 == 0) renderOnce(pet);
+        }
+        CHECK(pet.lastError.empty(), "%s burst failed: %s", id, pet.lastError.c_str());
+    }
+    Pet yoyo(7);
+    yoyo.select(*findAccessory("yoyo")); yoyo.place(200, 200); yoyo.burst();
+    CHECK(yoyo.body.vy > 6.f, "yoyo throws down instead of generic upward kick");
+    Pet potion(7);
+    potion.select(*findAccessory("potion"));
+    CHECK(potion.hints.orbitY > 0 && potion.hints.tiltBase < 0, "flask hangs by its top");
+    Pet airship(7);
+    airship.select(*findAccessory("airship"));
+    CHECK(airship.hints.orbitY < 0 && airship.hints.lift < 0, "airship has positive buoyancy");
+}
+
 static void testParticles() {
     Particles p;
     for (int i = 0; i < 100; i++) p.spawn(0, 0, 1, 0, 1);
@@ -121,7 +168,7 @@ static void testBurst() {
     pet.burst();
     CHECK(pet.body.burst == 1.f, "burst flag");
     CHECK(pet.body.vy < vy - 4.9f, "kick applied (star kick=5): %.2f", pet.body.vy);
-    CHECK(pet.particles.alive() == pet.hints.sparks, "sparks %d", pet.particles.alive());
+    CHECK(pet.particles.alive() == 15, "star emits three sparks per point: %d", pet.particles.alive());
     CHECK(std::string(pet.state()) == "Burst", "state %s", pet.state());
     for (int i = 0; i < 120; i++) pet.step();
     CHECK(pet.body.burst == 0.f, "burst decays to zero (%.3f)", pet.body.burst);
@@ -187,36 +234,103 @@ static void testBoundsCoverDrawing() {
             if (i == 60) pet.burst();
             pet.step();
         }
-        const int W = 400, H = 400;
-        cairo_surface_t* s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, W, H);
-        cairo_t* cr = cairo_create(s);
-        pet.render(cr);
-        cairo_destroy(cr);
-        cairo_surface_flush(s);
-        const Bounds b = pet.bounds();
-        const unsigned char* data = cairo_image_surface_get_data(s);
-        const int stride = cairo_image_surface_get_stride(s);
-        int outside = 0, painted = 0;
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++) {
-                const uint32_t px = *reinterpret_cast<const uint32_t*>(data + y * stride + x * 4);
-                if ((px >> 24) < 2) continue;
-                painted++;
-                if (x + 1 < b.x0 || x > b.x1 + 1 || y + 1 < b.y0 || y > b.y1 + 1) outside++;
-            }
-        cairo_surface_destroy(s);
-        CHECK(painted > 200, "%s painted only %d px", def.id.c_str(), painted);
-        CHECK(outside == 0, "%s painted %d px outside its bounds", def.id.c_str(), outside);
+        pet.setParam("size", 1.5f);
+        pet.burst();
+        for (int phase = 0; phase < 5; phase++) {
+            if (phase) for (int i = 0; i < 12; i++) pet.step();
+            const int W = 600, H = 600;
+            cairo_surface_t* s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, W, H);
+            cairo_t* cr = cairo_create(s);
+            pet.render(cr);
+            cairo_destroy(cr);
+            cairo_surface_flush(s);
+            const Bounds b = pet.bounds();
+            const unsigned char* data = cairo_image_surface_get_data(s);
+            const int stride = cairo_image_surface_get_stride(s);
+            int outside = 0, painted = 0;
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++) {
+                    const uint32_t px = *reinterpret_cast<const uint32_t*>(data + y * stride + x * 4);
+                    if ((px >> 24) < 2) continue;
+                    painted++;
+                    if (x + 1 < b.x0 || x > b.x1 + 1 || y + 1 < b.y0 || y > b.y1 + 1) outside++;
+                }
+            cairo_surface_destroy(s);
+            CHECK(painted > 200, "%s painted only %d px", def.id.c_str(), painted);
+            CHECK(outside == 0, "%s phase %d painted %d px outside its bounds", def.id.c_str(), phase, outside);
+        }
     }
+}
+
+static void testDistinctBursts() {
+    Pet fish(7);
+    fish.select(*findAccessory("fish"));
+    fish.place(200, 200);
+    fish.burst();
+    CHECK(fish.body.vx > 4.f && fish.body.vy == 0.f, "fish dashes horizontally");
+    Pet jelly(7);
+    jelly.select(*findAccessory("jellyfish"));
+    jelly.place(200, 200);
+    jelly.burst();
+    CHECK(jelly.body.vy == 0.f, "jellyfish contracts before its swimming impulse");
+    Pet restingJelly(7);
+    restingJelly.select(*findAccessory("jellyfish"));
+    restingJelly.place(200, 200);
+    for (int i = 0; i < 5; i++) { jelly.step(); restingJelly.step(); }
+    CHECK(jelly.body.y < restingJelly.body.y - 2.f, "jellyfish swims after contraction: %.2f vs %.2f", jelly.body.y, restingJelly.body.y);
+    Pet ufo(7);
+    ufo.select(*findAccessory("ufo"));
+    ufo.place(200, 200);
+    ufo.burst();
+    CHECK(ufo.body.vy == 0.f && ufo.particles.alive() > 0, "ufo absorbs without generic upward kick");
+}
+
+static void testAllayItem() {
+    Pet pet(7);
+    pet.select(*findAccessory("allay"));
+    pet.place(200, 200);
+    // Render the accessory alone so rope and particles cannot obscure its palm.
+    auto sprite = pet.def->create(pet);
+    auto countItemGlints = [&]() {
+        cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 400, 400);
+        cairo_t* cr = cairo_create(surface);
+        sprite->render(cr, pet);
+        cairo_destroy(cr);
+        cairo_surface_flush(surface);
+        const auto* data = cairo_image_surface_get_data(surface);
+        const int stride = cairo_image_surface_get_stride(surface);
+        int white = 0;
+        for (int y = int(pet.body.y) + 2; y < int(pet.body.y) + 13; y++)
+            for (int x = int(pet.body.x) - 17; x < int(pet.body.x) - 6; x++) {
+                const uint32_t pixel = *reinterpret_cast<const uint32_t*>(data + y * stride + x * 4);
+                if (((pixel >> 16) & 255) > 220 && ((pixel >> 8) & 255) > 220 && (pixel & 255) > 220)
+                    white++;
+            }
+        cairo_surface_destroy(surface);
+        return white;
+    };
+    CHECK(countItemGlints() == 0, "Allay holds no item at rest");
+    pet.body.burst = 1.f;
+    sprite->onBurst(pet);
+    CHECK(countItemGlints() > 0, "burst diamond must appear between Allay's hands");
+    pet.body.burst = 0.f;
+    CHECK(countItemGlints() == 0, "cancelled burst cannot leave Allay holding an item");
+    pet.body.burst = 1.f;
+    for (int i = 0; i < 60; i++) sprite->update(pet);
+    CHECK(countItemGlints() == 0, "Allay item disappears after the burst");
 }
 
 int main() {
     testRestPose();
     testViolentShakeNeverDetaches();
     testAngleWrapNoSpin();
+    testUprightBanking();
+    testNewAccessoryCatalog();
     testParticles();
     testBurst();
     testDeterminism();
+    testDistinctBursts();
+    testAllayItem();
     testClampingAndSettings();
     testBoundsCoverDrawing();
     if (failures) { std::printf("%d check(s) failed\n", failures); return 1; }

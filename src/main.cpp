@@ -22,6 +22,9 @@
 #include <vector>
 
 #include "Ipc.hpp"
+#include "Autostart.hpp"
+#include "Process.hpp"
+#include <filesystem>
 #include "Overlay.hpp"
 #include "Settings.hpp"
 #include "Sim.hpp"
@@ -30,7 +33,7 @@
 namespace mousepet {
 namespace {
 
-constexpr const char* VERSION = "0.2.2";
+constexpr const char* VERSION = "0.3.0";
 
 void usage() {
     std::fprintf(
@@ -43,6 +46,7 @@ void usage() {
         "  mousepet --pet --next | --pet <id>         switch pet (flag syntax)\n"
         "  mousepet burst                             emit click burst\n"
         "  mousepet plugin load | unload | status     manage Hyprland hook plugin\n"
+        "  mousepet autostart enable|disable|status   configure Hyprland startup\n"
         "  mousepet ctl COMMAND...                    control running instance\n"
         "  mousepet list                              list accessories and parameters\n"
         "  mousepet snapshot OUT.png [options]        headless render (tests/previews)\n"
@@ -163,46 +167,28 @@ int ctl(int argc, char** argv) {
     return r->rfind("error", 0) == 0 ? 1 : 0;
 }
 
-int pluginCmd(int argc, char** argv) {
-    std::string sub = argc > 0 ? argv[0] : "status";
-    const char* home = std::getenv("HOME");
-    std::vector<std::string> candidates = {
-        std::string(home ? home : "") + "/.local/lib/mousepet-hyprland.so",
-        "build/mousepet-hyprland.so",
-        "../build/mousepet-hyprland.so"
+std::string pluginPath() {
+    const auto executable = std::filesystem::path(executablePath());
+    std::vector<std::filesystem::path> candidates = {
+        executable.parent_path().parent_path() / "lib/mousepet-hyprland.so",
+        executable.parent_path() / "mousepet-hyprland.so"
     };
+    if (const char* override = std::getenv("MOUSEPET_PLUGIN"); override && *override)
+        candidates.insert(candidates.begin(), override);
+    for (const auto& candidate : candidates)
+        if (std::filesystem::is_regular_file(candidate)) return std::filesystem::canonical(candidate).string();
+    return {};
+}
 
-    std::string pluginPath;
-    for (const auto& c : candidates) {
-        if (access(c.c_str(), F_OK) == 0) { pluginPath = c; break; }
+int pluginCmd(int argc, char** argv) {
+    const std::string sub = argc ? argv[0] : "status";
+    if (sub == "status") return runProcess({"hyprctl", "plugin", "list"});
+    if (sub != "load" && sub != "unload") {
+        std::fprintf(stderr, "Usage: mousepet plugin load|unload|status\n"); return 1;
     }
-
-    if (sub == "load") {
-        if (pluginPath.empty()) {
-            std::fprintf(stderr, "Plugin not found. Build it with: make plugin\n");
-            return 1;
-        }
-        char absBuf[PATH_MAX];
-        if (realpath(pluginPath.c_str(), absBuf)) {
-            std::string cmd = "hyprctl plugin load " + std::string(absBuf);
-            return std::system(cmd.c_str());
-        }
-        return 1;
-    } else if (sub == "unload") {
-        if (!pluginPath.empty()) {
-            char absBuf[PATH_MAX];
-            if (realpath(pluginPath.c_str(), absBuf)) {
-                std::string cmd = "hyprctl plugin unload " + std::string(absBuf);
-                return std::system(cmd.c_str());
-            }
-        }
-        return std::system("hyprctl plugin unload mousepet-hyprland");
-    } else if (sub == "status") {
-        return std::system("hyprctl plugin list | grep -E -A 3 'mousepet|dynamic-cursors' || true");
-    }
-
-    std::fprintf(stderr, "Usage: mousepet plugin load|unload|status\n");
-    return 1;
+    const auto path = pluginPath();
+    if (path.empty()) { std::fprintf(stderr, "Plugin not found. Reinstall MousePet or run make plugin.\n"); return 1; }
+    return runProcess({"hyprctl", "plugin", sub, path});
 }
 
 // ── Daemon ────────────────────────────────────────────────────────────
@@ -273,6 +259,8 @@ struct Daemon {
         std::ostringstream s;
         s << "{\"version\":\"" << VERSION << "\",\"accessory\":\"" << (pet.def ? pet.def->id : "") << "\",\"state\":\""
           << pet.state() << "\",\"fps\":" << fmt(fps) << ",\"visible\":" << (settings.visible ? "true" : "false")
+          << ",\"cursorVisible\":" << (bridge.isCursorVisible() ? "true" : "false")
+          << ",\"pluginConnected\":" << (bridge.isConnected() ? "true" : "false")
           << ",\"motionBlur\":" << (settings.motionBlur ? "true" : "false") << ",\"scale\":" << fmt(settings.scale)
           << ",\"commits\":" << overlay.commits() << ",\"cursor\":[" << fmt(pet.mouse.x * settings.scale) << ","
           << fmt(pet.mouse.y * settings.scale) << "],\"config\":{\"ropeLength\":" << fmt(pet.config.ropeLength)
@@ -462,16 +450,12 @@ int run(int argc, char** argv) {
         dm.cursor.init();
         dm.bridge.init();
         if (!dm.bridge.isConnected()) {
-            std::string plugPath = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/lib/mousepet-hyprland.so";
-            if (access(plugPath.c_str(), F_OK) != 0) plugPath = "build/mousepet-hyprland.so";
-            char absPath[PATH_MAX];
-            if (realpath(plugPath.c_str(), absPath)) {
-                std::string cmd = "hyprctl plugin load " + std::string(absPath) + " >/dev/null 2>&1";
-                if (std::system(cmd.c_str()) == 0) {
-                    dm.bridge.init();
-                    std::fprintf(stderr, "[mousepet] Automatically connected Hyprland click and cursor hook\n");
-                }
-            }
+            const auto path = pluginPath();
+            if (!path.empty() && runProcess({"hyprctl", "plugin", "load", path}, true) == 0 && dm.bridge.init())
+                std::fprintf(stderr, "[mousepet] Automatically connected Hyprland click and cursor hook\n");
+        }
+        if (!dm.bridge.isConnected()) {
+            std::fprintf(stderr, "[mousepet] Hyprland hook unavailable: automatic click bursts and cursor hiding require the plugin.\n");
         }
     }
 
@@ -549,6 +533,7 @@ int main(int argc, char** argv) {
     if (cmd == "--version") { std::puts(VERSION); return 0; }
     if (cmd == "list") { std::fputs(listText().c_str(), stdout); return 0; }
     if (cmd == "ctl") return ctl(argc - 2, argv + 2);
+    if (cmd == "autostart") return autostartCommand(argc - 2, argv + 2);
     if (cmd == "plugin") return pluginCmd(argc - 2, argv + 2);
     if (cmd == "burst") {
         char* args[] = {(char*)"burst"};

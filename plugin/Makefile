@@ -10,7 +10,7 @@ OUTPUT = ../build/$(PLUGIN_NAME).so
 
 all: $(OUTPUT)
 
-$(OUTPUT): mousepet_plugin.cpp
+$(OUTPUT): mousepet_plugin.cpp ../src/SharedBridge.hpp
 	@mkdir -p ../build
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $< -o $@
 

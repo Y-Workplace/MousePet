@@ -7,6 +7,7 @@ class Kite final : public Accessory {
     Chain tail_{TAIL_NODES};
     float flutter_ = 0.0f;
     float bank_ = 0.0f;
+    float gustAge_ = 100.f;
 
 public:
     explicit Kite(Pet& pet) {
@@ -15,7 +16,8 @@ public:
 
     void update(Pet& pet) override {
         Body& b = pet.body;
-        flutter_ += 0.12f;
+        flutter_ += 0.12f + b.burst * 0.24f;
+        gustAge_ = std::min(gustAge_ + 1.f, 100.f);
         b.vy += std::sin(flutter_) * 0.04f;
 
         // Dynamic aerodynamic banking when cursor moves
@@ -25,7 +27,8 @@ public:
 
     void lateUpdate(Pet& pet) override {
         const Body& b = pet.body;
-        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f +
+                                 std::sin(gustAge_ * 0.22f) * std::exp(-gustAge_ * 0.065f) * 0.55f;
         // Tail starts from the bottom tip of the kite (relative to angle)
         const float c = std::cos(totalAngle), s = std::sin(totalAngle);
         const float startX = b.x - s * 22.0f;
@@ -34,7 +37,9 @@ public:
     }
 
     void onBurst(Pet& pet) override {
-        // Confetti burst
+        gustAge_ = 0.f;
+        pet.body.vx += 3.5f;
+        // A gust tips the kite, whipping its tail through a loose figure eight.
         for (int i = 0; i < 14; i++) {
             float a = pet.random() * TAU;
             float spd = 1.0f + pet.random() * 2.5f;
@@ -85,7 +90,8 @@ public:
         cairo_restore(cr);
 
         // 2. Draw Diamond Kite Body
-        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f +
+                                 std::sin(gustAge_ * 0.22f) * std::exp(-gustAge_ * 0.065f) * 0.55f;
         cairo_save(cr);
         cairo_translate(cr, b.x, b.y);
         cairo_rotate(cr, totalAngle);
@@ -155,7 +161,7 @@ static struct KiteRegistrar {
     KiteRegistrar() {
         registerAccessory({"kite", "Pipa Colorida", rgb(0xf43f5e),
                            CoreConfig{70, 0.50f, 0.90f, 0.22f},
-                           hints({{"orbitX", 42}, {"orbitY", -35}, {"sway", 6}, {"tilt", 0.75f}, {"tiltVel", 0.05f}, {"kick", 5}, {"sparks", 14}}),
+                           hints({{"orbitX", 42}, {"orbitY", -35}, {"sway", 6}, {"tilt", 0.75f}, {"tiltVel", 0.05f}, {"kick", 5}, {"sparks", 0}}),
                            RopeStyle{rgb(0xf43f5e), rgb(0xfecdd3), 1.8f},
                            ParticleStyle{rgb(0xfbbf24), 2.2f, 0.02f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},

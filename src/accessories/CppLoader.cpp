@@ -1,5 +1,7 @@
 #include "CppLoader.hpp"
 #include "Registry.hpp"
+#include "../Process.hpp"
+#include <filesystem>
 
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -56,9 +58,9 @@ static bool compileAndLoadCpp(const std::string& cppPath) {
     // If .so does not exist or .cpp is newer, compile it on execution!
     if (!fileExists(soPath) || cppTime > soTime) {
         std::fprintf(stderr, "[mousepet] Compiling accessory source %s -> %s...\n", cppPath.c_str(), soPath.c_str());
-        std::string cmd = "g++ -O2 -shared -fPIC -std=c++20 "
-                          "$(pkg-config --cflags cairo 2>/dev/null) "
-                          "\"" + cppPath + "\" -o \"" + soPath + "\" 2>&1";
+        const auto includes = std::filesystem::path(executablePath()).parent_path().parent_path() / "include/mousepet";
+        std::string cmd = "g++ -O2 -shared -fPIC -std=c++20 $(pkg-config --cflags cairo 2>/dev/null) -I " +
+                          shellQuote(includes.string()) + " " + shellQuote(cppPath) + " -o " + shellQuote(soPath) + " 2>&1";
         FILE* pipe = popen(cmd.c_str(), "r");
         if (pipe) {
             char buf[256];

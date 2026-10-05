@@ -16,3 +16,14 @@ snapshots/
 *.swp
 *~
 .fuse_hidden*
+
+# Local agent state, credentials, and private configuration
+.agents/
+.codex/
+.aws/
+.env
+.env.*
+*.pem
+*.key
+__pycache__/
+*.pyc

@@ -10,11 +10,12 @@ import subprocess
 import tempfile
 import time
 import sys
+import struct
 
 def main():
-    plugin = pathlib.Path("/home/y/.local/lib/mousepet-hyprland.so").resolve()
+    plugin = pathlib.Path("build/mousepet-hyprland.so").resolve()
     if not plugin.exists():
-        plugin = pathlib.Path("build/mousepet-hyprland.so").resolve()
+        raise RuntimeError("Build the plugin first: make plugin")
 
     if not shutil.which("Hyprland"):
         print("Hyprland not available, skipping.")
@@ -104,6 +105,21 @@ def main():
             print(f"Active plugins in sandbox:\n{list_res.stdout.strip()}")
             assert "mousepet-hyprland" in list_res.stdout
 
+            # No pointer input is needed to keep visibility and liveness current.
+            bridge_path = pathlib.Path("/dev/shm") / ("mousepet_bridge_shm_" + instance)
+            before = bridge_path.read_bytes()
+            assert before[40] == 1
+            heartbeat = struct.unpack_from("Q", before, 32)[0]
+            # The IPC socket appears before the nested output finishes configuring.
+            for _ in range(100):
+                time.sleep(0.05)
+                after = bridge_path.read_bytes()
+                if struct.unpack_from("Q", after, 32)[0] > heartbeat:
+                    break
+            else:
+                raise AssertionError("Idle heartbeat stalled")
+            assert int(time.time() * 1000) - struct.unpack_from("Q", after, 32)[0] < 1000
+
             # Unload plugin cleanly
             unload_res = subprocess.run(
                 ["hyprctl", "plugin", "unload", str(plugin)],
@@ -115,8 +131,13 @@ def main():
             print(f"hyprctl plugin unload output: {unload_res.stdout.strip()}")
             assert unload_res.returncode == 0
 
-            print("PLUGIN SANDBOX TEST PASSED WITH ZERO CRASHES!")
+            assert bridge_path.read_bytes()[40] == 0
+            bridge_path.unlink()
+            print("PLUGIN SANDBOX TEST PASSED: loading, idle heartbeat and clean unloading!")
 
+        except Exception:
+            print(log.read_text())
+            raise
         finally:
             if hypr and hypr.poll() is None:
                 hypr.terminate()

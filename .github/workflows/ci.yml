@@ -1,0 +1,19 @@
+name: Core and setup tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install core development dependencies
+        run: sudo apt-get update && sudo apt-get install -y g++ make pkg-config python3 libwayland-dev wayland-protocols libcairo2-dev libluajit-5.1-dev shellcheck
+      - name: Check installer syntax
+        run: bash -n install.sh run.sh && shellcheck install.sh run.sh
+      - name: Build core and run headless tests
+        run: make -j2 core && make test
+      - name: Test isolated installation and autostart
+        run: python3 tests/setup_test.py --binary build/mousepet
