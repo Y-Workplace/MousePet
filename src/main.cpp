@@ -221,21 +221,13 @@ struct Daemon {
     std::chrono::steady_clock::time_point fpsAt = std::chrono::steady_clock::now();
     unsigned long lastCommits = 0;
 
-    DrawOptions options() const { return {settings.scale, settings.motionBlur, settings.visible}; }
+    DrawOptions options() const {
+        const bool effectiveVisible = settings.visible && (demo || bridge.isCursorVisible());
+        return {settings.scale, settings.motionBlur, effectiveVisible};
+    }
 
     void save() {
         if (!settings.save(settingsPath)) std::fprintf(stderr, "[mousepet] could not save %s\n", settingsPath.c_str());
-    }
-
-    static std::pair<float, float> getCursorCenterOffset() {
-        float sz = 24.0f;
-        const char* env = std::getenv("XCURSOR_SIZE");
-        if (env && *env) {
-            float v = std::strtof(env, nullptr);
-            if (v >= 8.0f && v <= 128.0f) sz = v;
-        }
-        // Pointer hotspot is at the tip (0,0). Visual center of standard arrow cursor is at ~40% width/height
-        return { sz * 0.40f, sz * 0.40f };
     }
 
     bool readCursor(float& x, float& y) {
@@ -259,7 +251,7 @@ struct Daemon {
             }
         }
         if (ok) {
-            const auto [ox, oy] = getCursorCenterOffset();
+            const auto [ox, oy] = bridge.queryOffset();
             x += ox;
             y += oy;
             return true;
@@ -466,8 +458,7 @@ int run(int argc, char** argv) {
     dm.settings.applyTo(dm.pet);
 
     // Auto-load Hyprland companion hook plugin for click burst events if on Hyprland
-    const char* hyprSig = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
-    if (hyprSig && *hyprSig && !dm.demo) {
+    if (!dm.demo) {
         dm.bridge.init();
         if (!dm.bridge.isConnected()) {
             std::string plugPath = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/lib/mousepet-hyprland.so";

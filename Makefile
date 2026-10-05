@@ -70,8 +70,12 @@ plugin: $(BUILD)/mousepet-hyprland.so
 $(BUILD)/sim_tests: tests/sim_tests.cpp $(CORE_OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDLIBS)
 
-test: $(BUILD)/sim_tests $(BUILD)/mousepet
+$(BUILD)/bridge_tests: tests/bridge_tests.cpp $(BUILD)/obj/Ipc.o
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDLIBS)
+
+test: $(BUILD)/sim_tests $(BUILD)/bridge_tests $(BUILD)/mousepet
 	$(LOADER) ./$(BUILD)/sim_tests
+	$(LOADER) ./$(BUILD)/bridge_tests
 	python3 tests/snapshot_test.py --binary $(BUILD)/mousepet --out $(BUILD)/snapshots
 
 # Runs MousePet inside a private nested Hyprland (never touches the running session).

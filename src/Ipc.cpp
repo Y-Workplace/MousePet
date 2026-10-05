@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dirent.h>
+#include <algorithm>
 
 namespace mousepet {
 
@@ -71,9 +73,35 @@ std::optional<std::string> requestUnix(const std::string& path, const std::strin
 
 bool HyprlandCursor::init() {
     const char* sig = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
-    if (!sig || !*sig) return false;
-    path_ = runtimeDir() + "/hypr/" + sig + "/.socket.sock";
-    return access(path_.c_str(), F_OK) == 0;
+    if (sig && *sig) {
+        path_ = runtimeDir() + "/hypr/" + sig + "/.socket.sock";
+        if (access(path_.c_str(), F_OK) == 0) return true;
+    }
+    // Auto-detect newest active Hyprland instance socket
+    const std::string hdir = runtimeDir() + "/hypr";
+    DIR* d = opendir(hdir.c_str());
+    if (d) {
+        struct dirent* ent;
+        time_t bestTime = 0;
+        std::string bestPath;
+        while ((ent = readdir(d)) != nullptr) {
+            if (ent->d_name[0] == '.') continue;
+            std::string cand = hdir + "/" + ent->d_name + "/.socket.sock";
+            struct stat st{};
+            if (stat(cand.c_str(), &st) == 0 && S_ISSOCK(st.st_mode)) {
+                if (st.st_mtime >= bestTime) {
+                    bestTime = st.st_mtime;
+                    bestPath = cand;
+                }
+            }
+        }
+        closedir(d);
+        if (!bestPath.empty()) {
+            path_ = bestPath;
+            return true;
+        }
+    }
+    return false;
 }
 
 std::optional<std::pair<float, float>> HyprlandCursor::query() const {
@@ -121,33 +149,56 @@ bool PetBridgeClient::init() {
     return isConnected();
 }
 
-bool PetBridgeClient::isConnected() {
+bool PetBridgeClient::isConnected() const {
     if (!bridge_) {
-        init();
+        const_cast<PetBridgeClient*>(this)->init();
         if (!bridge_) return false;
     }
-    if (bridge_->magic != MOUSEPET_BRIDGE_MAGIC || bridge_->version != 1) {
-        disconnect();
+    if (bridge_->magic != MOUSEPET_BRIDGE_MAGIC || (bridge_->version != 1 && bridge_->version != 2)) {
+        const_cast<PetBridgeClient*>(this)->disconnect();
         return false;
     }
     const uint64_t now = getNowMs();
     const uint64_t lastHb = bridge_->lastHeartbeatMs.load(std::memory_order_relaxed);
-    if (!bridge_->isPluginActive.load(std::memory_order_relaxed) || (now > lastHb && now - lastHb > 2000)) {
+    if (!bridge_->isPluginActive.load(std::memory_order_relaxed) || (now > lastHb && now - lastHb > 8000)) {
         return false;
     }
     return true;
 }
 
-std::optional<std::pair<float, float>> PetBridgeClient::queryPos() {
+std::optional<std::pair<float, float>> PetBridgeClient::queryPos() const {
     if (!isConnected()) return std::nullopt;
     return std::make_pair(bridge_->mouseX.load(std::memory_order_relaxed),
                           bridge_->mouseY.load(std::memory_order_relaxed));
 }
 
+std::pair<float, float> PetBridgeClient::queryOffset() const {
+    if (!isConnected()) {
+        float sz = 24.0f;
+        const char* env = std::getenv("XCURSOR_SIZE");
+        if (env && *env) {
+            float v = std::strtof(env, nullptr);
+            if (v >= 8.0f && v <= 128.0f) sz = v;
+        }
+        return { sz * 0.40f, sz * 0.40f };
+    }
+    return std::make_pair(bridge_->centerOffsetX.load(std::memory_order_relaxed),
+                          bridge_->centerOffsetY.load(std::memory_order_relaxed));
+}
+
+bool PetBridgeClient::isCursorVisible() const {
+    if (!isConnected()) return true;
+    return bridge_->isCursorVisible.load(std::memory_order_relaxed);
+}
+
 bool PetBridgeClient::checkClick(uint32_t& outButton) {
-    if (!isConnected()) return false;
+    if (!bridge_) {
+        init();
+        if (!bridge_) return false;
+    }
+    if (bridge_->magic != MOUSEPET_BRIDGE_MAGIC) return false;
     const uint32_t cur = bridge_->clickSequence.load(std::memory_order_acquire);
-    if (cur > lastClickSeq_) {
+    if (cur != lastClickSeq_) {
         lastClickSeq_ = cur;
         outButton = bridge_->clickButton.load(std::memory_order_relaxed);
         return true;

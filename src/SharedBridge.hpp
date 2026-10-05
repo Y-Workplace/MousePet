@@ -13,11 +13,19 @@ constexpr uint32_t MOUSEPET_BRIDGE_MAGIC = 0x50455431;  // 'PET1'
 
 struct alignas(64) SharedPetBridge {
     uint32_t magic{MOUSEPET_BRIDGE_MAGIC};
-    uint32_t version{1};
+    uint32_t version{2};
 
     // Instant cursor coordinates (updated by Hyprland plugin at high frequency)
     std::atomic<float> mouseX{0.0f};
     std::atomic<float> mouseY{0.0f};
+
+    // Cursor visibility state (false if hidden by app / website / video / typing)
+    std::atomic<bool> isCursorVisible{true};
+
+    // Active cursor shape offset (offset from hotspot to visual center)
+    // For default pointer arrow: ~9.6, 9.6; for I-beam / crosshair: 0.0, 0.0
+    std::atomic<float> centerOffsetX{9.6f};
+    std::atomic<float> centerOffsetY{9.6f};
 
     // Click event tracking
     std::atomic<uint32_t> clickSequence{0};

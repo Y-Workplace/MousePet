@@ -15,8 +15,10 @@ public:
     PetBridgeClient() = default;
     ~PetBridgeClient();
     bool init();
-    bool isConnected();
-    std::optional<std::pair<float, float>> queryPos();
+    bool isConnected() const;
+    std::optional<std::pair<float, float>> queryPos() const;
+    std::pair<float, float> queryOffset() const;
+    bool isCursorVisible() const;
     bool checkClick(uint32_t& outButton);
 
 private:

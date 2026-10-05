@@ -6,90 +6,28 @@ class Allay final : public Accessory {
     float wingPhase_ = 0.0f;
     float dance_ = 0.0f;
 
-    // Authentic 28x22 pixel-art sprite matching Minecraft Allay reference
-    static constexpr int SPR_W = 28;
-    static constexpr int SPR_H = 22;
-
-    static constexpr Color PALETTE[8] = {
-        {0, 0, 0, 0},              // 0: transparent
-        rgb(0x1b2a5c),             // 1: dark navy border
-        rgb(0x005f8b),             // 2: deep blue shade
-        rgb(0x028cd4),             // 3: mid blue
-        rgb(0x10afe9),             // 4: cyan shadow
-        rgb(0x34ccf3),             // 5: main bright cyan
-        rgb(0x3bf6ff),             // 6: luminous highlight
-        rgb(0xe6e6e8),             // 7: white eye gleam
-    };
-
-    static constexpr uint8_t SPRITE[SPR_H][SPR_W] = {
-        {0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 6, 6, 5, 5, 5, 5, 5, 5, 5, 6, 6, 5, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 5, 4, 4, 4, 4, 4, 5, 5, 5, 4, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 7, 7, 4, 4, 4, 7, 7, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 7, 7, 4, 4, 4, 7, 7, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 7, 7, 4, 4, 4, 7, 7, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 7, 7, 5, 5, 5, 7, 7, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 2, 5, 5, 7, 7, 5, 5, 5, 7, 7, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {2, 2, 2, 0, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 3, 3, 1, 0, 0, 0, 0, 0, 2, 2, 2},
-        {1, 4, 4, 2, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 3, 3, 1, 0, 0, 2, 2, 2, 4, 4, 1},
-        {0, 1, 1, 4, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 3, 3, 1, 2, 2, 4, 4, 4, 1, 1, 0},
-        {1, 1, 3, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 4, 2, 1, 3, 3, 1, 1},
-        {1, 2, 2, 1, 1, 1, 1, 6, 1, 5, 5, 5, 5, 3, 2, 6, 6, 1, 3, 3, 1, 1, 1, 1, 1, 2, 2, 1},
-        {1, 1, 1, 1, 0, 1, 6, 6, 1, 5, 5, 5, 5, 3, 2, 6, 6, 1, 1, 2, 2, 1, 0, 0, 1, 1, 1, 1},
-        {0, 0, 0, 0, 1, 6, 6, 6, 1, 1, 4, 4, 4, 3, 3, 2, 6, 6, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 1, 6, 6, 1, 0, 1, 4, 4, 4, 4, 3, 2, 6, 6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 4, 4, 4, 4, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 3, 3, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 1, 3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    };
-
-    // 8x8 Minecraft Diamond item held by the Allay
-    static constexpr uint8_t DIAMOND[8][8] = {
-        {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 1, 6, 6, 5, 5, 1, 0},
-        {1, 6, 7, 6, 5, 5, 4, 1},
-        {1, 6, 6, 5, 5, 4, 4, 1},
-        {1, 5, 5, 5, 4, 4, 3, 1},
-        {0, 1, 5, 4, 4, 3, 1, 0},
-        {0, 0, 1, 4, 3, 1, 0, 0},
-        {0, 0, 0, 1, 1, 0, 0, 0},
-    };
-
-    static constexpr Color DIAMOND_PALETTE[8] = {
-        {0, 0, 0, 0},
-        rgb(0x0f2b38), // dark cyan border
-        rgb(0x005577),
-        rgb(0x0088aa),
-        rgb(0x00bbcc),
-        rgb(0x2ce2ee), // vivid diamond cyan
-        rgb(0x8cf6fa), // highlight
-        rgb(0xffffff), // glint
-    };
-
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
-        wingPhase_ += 0.35f + sp * 0.15f + b.burst * 0.45f;
+        // Wings flutter rapidly, faster when moving or on burst
+        wingPhase_ += 0.35f + sp * 0.12f + b.burst * 0.4f;
         dance_ += 0.05f;
 
-        // Minecraft fairy sparkles floating upward
-        if (pet.random() < 0.20f || b.burst > 0.1f) {
-            float ox = (pet.random() - 0.5f) * 18.0f;
+        // Fairy sparkle particles
+        if (pet.random() < 0.15f || b.burst > 0.1f) {
+            float ox = (pet.random() - 0.5f) * 16.0f;
             float oy = (pet.random() - 0.5f) * 16.0f;
             pet.emit(b.x + ox, b.y + oy,
-                     (pet.random() - 0.5f) * 0.4f, -0.5f - pet.random() * 0.5f, 0.9f);
+                     (pet.random() - 0.5f) * 0.4f, -0.4f - pet.random() * 0.4f, 0.9f);
         }
     }
 
     void onBurst(Pet& pet) override {
-        // Starburst of musical notes and diamond glints
-        for (int i = 0; i < 20; i++) {
+        // Starburst of musical fairy dust
+        for (int i = 0; i < 16; i++) {
             float a = pet.random() * TAU;
-            float spd = 1.4f + pet.random() * 2.2f;
+            float spd = 1.2f + pet.random() * 2.2f;
             pet.emit(pet.body.x, pet.body.y, std::cos(a) * spd, std::sin(a) * spd, 1.2f);
         }
     }
@@ -97,73 +35,123 @@ public:
     void render(cairo_t* cr, const Pet& pet) override {
         const Body& b = pet.body;
         const double sz = pet.param("size", 1.0f);
-        const float flap = std::sin(wingPhase_) * 1.5f;
+        const double wingSpan = std::sin(wingPhase_);
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle * 0.35f);
+        cairo_rotate(cr, b.angle * 0.4f);
         cairo_scale(cr, sz, sz);
 
-        // 1. Ambient Luminous Cyan Allay Glow
-        const double glowSize = 32.0 + b.burst * 14.0;
-        glow(cr, 0, -2, 4, glowSize,
-             {{0, rgba(59, 246, 255, 0.65)}, {0.5, rgba(52, 204, 243, 0.30)}, {1, rgba(2, 140, 212, 0)}},
+        // 1. Luminous Cyan Aura (Allay glows in dark)
+        glow(cr, 0, -2, 4, 30,
+             {{0, rgba(75, 227, 255, 0.55)}, {0.5, rgba(56, 189, 248, 0.25)}, {1, rgba(37, 99, 235, 0)}},
              CAIRO_OPERATOR_SCREEN, 1.0, true);
 
-        // 2. Render Pixel Art Sprite
-        const float P = 1.55f; // Pixel block size in points
-        const float originX = -float(SPR_W) * P * 0.5f;
-        const float originY = -float(SPR_H) * P * 0.5f - 2.0f;
+        // 2. Translucent Fluttering Fairy Wings (Behind body)
+        cairo_save(cr);
+        source(cr, rgba(200, 245, 255, 0.70));
+        cairo_set_line_width(cr, 1.0);
 
-        for (int y = 0; y < SPR_H; y++) {
-            for (int x = 0; x < SPR_W; x++) {
-                const uint8_t idx = SPRITE[y][x];
-                if (idx == 0) continue;
+        // Left Wing
+        cairo_save(cr);
+        cairo_translate(cr, -5, -4);
+        cairo_scale(cr, wingSpan, 1.0);
+        cairo_new_path(cr);
+        cairo_move_to(cr, 0, 0);
+        cairo_curve_to(cr, -12, -16, -20, -10, -18, 2);
+        cairo_curve_to(cr, -14, 8, -6, 4, 0, 0);
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.85));
+        cairo_stroke(cr);
+        cairo_restore(cr);
 
-                // Separate fluttering wings on sides
-                float py = originY + y * P;
-                if (x <= 4) {
-                    // Left wing flutters
-                    py += flap;
-                } else if (x >= 21) {
-                    // Right wing flutters
-                    py -= flap;
-                }
+        // Right Wing
+        cairo_save(cr);
+        cairo_translate(cr, 5, -4);
+        cairo_scale(cr, -wingSpan, 1.0);
+        cairo_new_path(cr);
+        cairo_move_to(cr, 0, 0);
+        cairo_curve_to(cr, -12, -16, -20, -10, -18, 2);
+        cairo_curve_to(cr, -14, 8, -6, 4, 0, 0);
+        source(cr, rgba(200, 245, 255, 0.70));
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.85));
+        cairo_stroke(cr);
+        cairo_restore(cr);
+        cairo_restore(cr);
 
-                const float px = originX + x * P;
-                source(cr, PALETTE[idx]);
-                cairo_rectangle(cr, px, py, P, P);
-                cairo_fill(cr);
-            }
-        }
+        // 3. Allay Floating Gown / Body
+        cairo_pattern_t* bg = cairo_pattern_create_linear(0, -6, 0, 14);
+        stop(bg, 0, rgb(0x4be3ff));
+        stop(bg, 0.7, rgb(0x0ea5e9));
+        stop(bg, 1, rgba(2, 132, 199, 0.4));  // Wispy ghost-like tail
+        cairo_new_path(cr);
+        cairo_move_to(cr, -5, -4);
+        cairo_curve_to(cr, -6, 4, -4, 12, 0, 15);
+        cairo_curve_to(cr, 4, 12, 6, 4, 5, -4);
+        cairo_close_path(cr);
+        cairo_set_source(cr, bg);
+        cairo_fill(cr);
+        cairo_pattern_destroy(bg);
 
-        // 3. Minecraft Item: Diamond held by the Allay
-        // Idle: hands hold item near chest (0, 7)
-        // Burst: Allay joyfully raises the diamond high above head (0, -16)!
-        const float burstLift = b.burst * 22.0f;
-        const float itemX = -4.0f * P;
-        const float itemY = (6.0f - burstLift) * P;
+        // 4. Allay Head (Rounded cute Minecraft silhouette)
+        cairo_pattern_t* hg = cairo_pattern_create_linear(0, -18, 0, -4);
+        stop(hg, 0, rgb(0x7dd3fc));
+        stop(hg, 1, rgb(0x38bdf8));
+        cairo_new_path(cr);
+        cairo_move_to(cr, -7, -6);
+        cairo_line_to(cr, -7, -14);
+        quadTo(cr, -7, -18, 0, -18);
+        quadTo(cr, 7, -18, 7, -14);
+        cairo_line_to(cr, 7, -6);
+        quadTo(cr, 0, -4, -7, -6);
+        cairo_close_path(cr);
+        cairo_set_source(cr, hg);
+        cairo_fill_preserve(cr);
+        cairo_pattern_destroy(hg);
 
-        // Diamond radiant gleam on burst
-        if (b.burst > 0.05f) {
-            glow(cr, 0, itemY + 4.0f * P, 0, 20.0f * b.burst,
-                 {{0, rgba(140, 246, 250, 0.95)}, {0.5, rgba(44, 226, 238, 0.5)}, {1, rgba(0, 85, 119, 0)}},
-                 CAIRO_OPERATOR_SCREEN, b.burst);
-        }
+        source(cr, rgba(255, 255, 255, 0.5));
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
 
-        // Render 8x8 Diamond
-        for (int dy = 0; dy < 8; dy++) {
-            for (int dx = 0; dx < 8; dx++) {
-                const uint8_t cidx = DIAMOND[dy][dx];
-                if (cidx == 0) continue;
-                source(cr, DIAMOND_PALETTE[cidx]);
-                cairo_rectangle(cr, itemX + dx * P, itemY + dy * P, P, P);
-                cairo_fill(cr);
-            }
-        }
+        // Cute Big Dark Eyes
+        source(cr, rgb(0x0369a1));
+        circle(cr, -3.2, -11, 1.8);
+        circle(cr, 3.2, -11, 1.8);
+        cairo_fill(cr);
+
+        // Eye highlights
+        source(cr, rgb(0xffffff));
+        circle(cr, -3.7, -11.6, 0.7);
+        circle(cr, 2.7, -11.6, 0.7);
+        cairo_fill(cr);
+
+        // Blushing rosy cheeks
+        source(cr, rgba(244, 114, 182, 0.45));
+        circle(cr, -5.2, -8, 1.4);
+        circle(cr, 5.2, -8, 1.4);
+        cairo_fill(cr);
+
+        // 5. Holding a Glistening Cookie / Amethyst in tiny hands
+        // Tiny cyan hands
+        source(cr, rgb(0x38bdf8));
+        circle(cr, -4, 2, 1.6);
+        circle(cr, 4, 2, 1.6);
+        cairo_fill(cr);
+
+        // Golden Cookie between hands
+        source(cr, rgb(0xd97706));
+        circle(cr, 0, 2.5, 3.2);
+        cairo_fill(cr);
+        // Chocolate chips
+        source(cr, rgb(0x451a03));
+        circle(cr, -1, 1.5, 0.7);
+        circle(cr, 1.2, 2.8, 0.6);
+        circle(cr, 0, 4, 0.6);
+        cairo_fill(cr);
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 38 * pet.param("size", 1.0f));
+        addBox(pet, b, 32 * pet.param("size", 1.0f));
     }
 };
 
