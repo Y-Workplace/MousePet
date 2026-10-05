@@ -3,24 +3,34 @@
 namespace mousepet {
 
 class Kite final : public Accessory {
-    Chain tail_{8};
-    float tilt_ = 0.0f;
+    static constexpr int TAIL_NODES = 7;
+    Chain tail_{TAIL_NODES};
+    float flutter_ = 0.0f;
+    float bank_ = 0.0f;
 
 public:
+    explicit Kite(Pet& pet) {
+        tail_.reset(pet.body.x, pet.body.y, pet.body.x, pet.body.y + 40);
+    }
+
     void update(Pet& pet) override {
         Body& b = pet.body;
-        tail_.follow(b.x, b.y + 18.0f, 6.0f, 0.82f, 0.25f, 0.65f);
+        flutter_ += 0.12f;
+        b.vy += std::sin(flutter_) * 0.04f;
 
-        // Dynamic aerodynamic banking when mouse moves
-        const float targetTilt = b.vx * 0.08f + std::sin(pet.time * 2.0f) * 0.08f;
-        tilt_ += (targetTilt - tilt_) * 0.20f;
+        // Dynamic aerodynamic banking when cursor moves
+        const float targetBank = std::clamp((pet.mouse.vx * 0.08f + b.vx * 0.05f), -0.70f, 0.70f);
+        bank_ += (targetBank - bank_) * 0.22f;
+    }
 
-        // Sparkle trail from tail end
-        if (pet.random() < 0.15f || b.burst > 0.1f) {
-            const int last = tail_.n - 1;
-            pet.emit(tail_.x[last], tail_.y[last],
-                     (pet.random() - 0.5f) * 0.5f, (pet.random() - 0.5f) * 0.5f, 0.8f);
-        }
+    void lateUpdate(Pet& pet) override {
+        const Body& b = pet.body;
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
+        // Tail starts from the bottom tip of the kite (relative to angle)
+        const float c = std::cos(totalAngle), s = std::sin(totalAngle);
+        const float startX = b.x - s * 22.0f;
+        const float startY = b.y + c * 22.0f;
+        tail_.follow(startX, startY, 6.0f, 0.82f, 0.25f, 0.70f);
     }
 
     void onBurst(Pet& pet) override {
@@ -74,10 +84,11 @@ public:
         }
         cairo_restore(cr);
 
-        // 2. Draw Diamond Kite Body with Aerodynamic Tilt
+        // 2. Draw Diamond Kite Body
+        const float totalAngle = b.angle * 0.35f + bank_ + std::sin(flutter_ * 2.0f) * 0.04f;
         cairo_save(cr);
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, tilt_);
+        cairo_rotate(cr, totalAngle);
         cairo_scale(cr, sz, sz);
 
         // Soft ambient aura
@@ -107,44 +118,46 @@ public:
         cairo_new_path(cr);
         cairo_move_to(cr, 16, -4); cairo_line_to(cr, 0, 22); cairo_line_to(cr, 0, -4);
         cairo_close_path(cr);
-        source(cr, rgb(0xa855f7)); cairo_fill(cr);
+        source(cr, rgb(0x8b5cf6)); cairo_fill(cr);
 
-        // Inner Bamboo Struts (Armação da pipa)
-        source(cr, rgba(255, 255, 255, 0.85));
+        // Cross Spars (Varetas de bambu)
+        source(cr, rgb(0x451a03));
         cairo_set_line_width(cr, 1.4);
-        cairo_new_path(cr);
-        // Vertical spar
         cairo_move_to(cr, 0, -22); cairo_line_to(cr, 0, 22);
-        // Curved cross spar
-        cairo_move_to(cr, -16, -4); quadTo(cr, 0, -7, 16, -4);
+        cairo_stroke(cr);
+        // Bowed horizontal crossbar
+        cairo_new_path(cr);
+        cairo_move_to(cr, -16, -4);
+        quadTo(cr, 0, -6, 16, -4);
         cairo_stroke(cr);
 
-        // White perimeter rim
+        // Outer crisp outline
         cairo_new_path(cr);
         cairo_move_to(cr, 0, -22);
         cairo_line_to(cr, 16, -4);
         cairo_line_to(cr, 0, 22);
         cairo_line_to(cr, -16, -4);
         cairo_close_path(cr);
-        source(cr, rgba(255, 255, 255, 0.95));
-        cairo_set_line_width(cr, 1.5);
+        source(cr, rgba(255, 255, 255, 0.8));
+        cairo_set_line_width(cr, 1.2);
         cairo_stroke(cr);
 
         cairo_restore(cr);
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 42 * pet.param("size", 1.0f));
+        addBox(pet, b, 32 * pet.param("size", 1.0f));
+        tail_.addTo(b, 8);
     }
 };
 
 static struct KiteRegistrar {
     KiteRegistrar() {
         registerAccessory({"kite", "Pipa Colorida", rgb(0xf43f5e),
-                           CoreConfig{65, 0.45f, 0.92f, 0.18f},
-                           hints({{"orbitX", 35}, {"orbitY", -35}, {"sway", 4.5f}, {"lift", -0.06f}, {"kick", 5}, {"sparks", 14}}),
-                           RopeStyle{rgb(0xf43f5e), rgb(0xfacc15), 1.2f},
-                           ParticleStyle{rgb(0xfacc15), 2.0f, 0.05f},
+                           CoreConfig{70, 0.50f, 0.90f, 0.22f},
+                           hints({{"orbitX", 42}, {"orbitY", -35}, {"sway", 6}, {"tilt", 0.75f}, {"tiltVel", 0.05f}, {"kick", 5}, {"sparks", 14}}),
+                           RopeStyle{rgb(0xf43f5e), rgb(0xfecdd3), 1.8f},
+                           ParticleStyle{rgb(0xfbbf24), 2.2f, 0.02f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},
                            makeAccessory<Kite>()});
     }

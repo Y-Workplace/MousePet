@@ -35,7 +35,7 @@ public:
         const Body& b = pet.body;
         const double sz = pet.param("size", 1.0f);
         const double glowIntensity = 0.75 + std::sin(pulse_) * 0.25 + b.burst * 1.2;
-        const double wingAngle = std::sin(wingVibe_) * 0.40;
+        const double wingAngle = std::sin(wingVibe_) * 0.35;
 
         cairo_translate(cr, b.x, b.y);
         cairo_rotate(cr, b.angle * 0.5f);
@@ -46,34 +46,44 @@ public:
              {{0, rgba(254, 240, 138, 0.95)}, {0.4, rgba(190, 242, 100, 0.45)}, {1, rgba(163, 230, 53, 0)}},
              CAIRO_OPERATOR_SCREEN, glowIntensity, true);
 
-        // 2. Wings attached directly to the thorax (hinged at x = +/-2.5, y = -1.5)
+        // 2. Vibrating Gossamer Wings (Attached directly to thorax)
         cairo_save(cr);
-        source(cr, rgba(240, 253, 244, 0.70));
         cairo_set_line_width(cr, 0.8);
 
-        // Left forewing
+        // Left wings (forewing and smaller hindwing)
         cairo_save(cr);
-        cairo_translate(cr, -2.5, -1.5);
+        cairo_translate(cr, -2.5, -1.0);
+        // Left hindwing
+        cairo_save(cr);
+        cairo_rotate(cr, -0.9 - wingAngle * 0.7);
+        source(cr, rgba(220, 252, 231, 0.50));
+        ellipse(cr, -5.5, 0, 5.5, 2.8);
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.75)); cairo_stroke(cr);
+        cairo_restore(cr);
+        // Left forewing
         cairo_rotate(cr, -0.45 - wingAngle);
-        cairo_new_path(cr);
-        cairo_move_to(cr, 0, 0);
-        cairo_curve_to(cr, -6, -8, -14, -6, -11, 2);
-        cairo_curve_to(cr, -8, 6, -3, 3, 0, 0);
-        cairo_close_path(cr);
+        source(cr, rgba(240, 253, 244, 0.70));
+        ellipse(cr, -7.0, 0, 7.0, 3.6);
         cairo_fill_preserve(cr);
         source(cr, rgba(255, 255, 255, 0.85)); cairo_stroke(cr);
         cairo_restore(cr);
 
-        // Right forewing
+        // Right wings (forewing and smaller hindwing)
         cairo_save(cr);
-        cairo_translate(cr, 2.5, -1.5);
+        cairo_translate(cr, 2.5, -1.0);
+        // Right hindwing
+        cairo_save(cr);
+        cairo_rotate(cr, 0.9 + wingAngle * 0.7);
+        source(cr, rgba(220, 252, 231, 0.50));
+        ellipse(cr, 5.5, 0, 5.5, 2.8);
+        cairo_fill_preserve(cr);
+        source(cr, rgba(255, 255, 255, 0.75)); cairo_stroke(cr);
+        cairo_restore(cr);
+        // Right forewing
         cairo_rotate(cr, 0.45 + wingAngle);
         source(cr, rgba(240, 253, 244, 0.70));
-        cairo_new_path(cr);
-        cairo_move_to(cr, 0, 0);
-        cairo_curve_to(cr, 6, -8, 14, -6, 11, 2);
-        cairo_curve_to(cr, 8, 6, 3, 3, 0, 0);
-        cairo_close_path(cr);
+        ellipse(cr, 7.0, 0, 7.0, 3.6);
         cairo_fill_preserve(cr);
         source(cr, rgba(255, 255, 255, 0.85)); cairo_stroke(cr);
         cairo_restore(cr);
@@ -126,17 +136,17 @@ public:
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 32 * pet.param("size", 1.0f));
+        addBox(pet, b, 34 * pet.param("size", 1.0f));
     }
 };
 
 static struct FireflyRegistrar {
     FireflyRegistrar() {
         registerAccessory({"firefly", "Vaga-lume da Floresta", rgb(0xa3e635),
-                           CoreConfig{50, 0.60f, 0.88f, 0.12f},
-                           hints({{"orbitX", 25}, {"orbitY", -25}, {"sway", 4.0f}, {"lift", -0.05f}, {"kick", 5}, {"sparks", 14}}),
-                           RopeStyle{rgb(0x4d7c0f), rgb(0xa3e635), 1.2f},
-                           ParticleStyle{rgb(0xfef08a), 2.2f, -0.02f},
+                           CoreConfig{60, 0.45f, 0.90f, 0.18f},
+                           hints({{"orbitX", 38}, {"orbitY", -24}, {"sway", 6}, {"lift", -0.04f}, {"kick", 5}, {"sparks", 16}}),
+                           RopeStyle{rgb(0x365314), rgb(0xa3e635), 1.8f},
+                           ParticleStyle{rgb(0xbef264), 2.2f, -0.02f}, // gentle floating pollen
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},
                            makeAccessory<Firefly>()});
     }

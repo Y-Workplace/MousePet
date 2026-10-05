@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <chrono>
+#include <cmath>
+#include <algorithm>
 
 HANDLE PHANDLE = nullptr;
 
@@ -16,6 +18,7 @@ static SharedPetBridge* g_bridge = nullptr;
 static int g_shmFd = -1;
 
 static Hyprutils::Signal::CHyprSignalListener* g_cursorHook = nullptr;
+static Hyprutils::Signal::CHyprSignalListener* g_tickHook = nullptr;
 static Hyprutils::Signal::CHyprSignalListener* g_mouseMoveHook = nullptr;
 static Hyprutils::Signal::CHyprSignalListener* g_mouseButtonHook = nullptr;
 
@@ -26,28 +29,46 @@ static void updateCursorShapeAndVisibility() {
 
     const auto sz = Pointer::mgr()->cursorSizeLogical();
     const auto hs = Pointer::mgr()->hotspot();
+    const auto& img = Pointer::mgr()->currentCursorImage();
 
-    // Check if cursor is visible: size must be strictly > 0.
-    // When hidden by app/browser/video, size is 0x0 or surface is null.
-    const bool isVis = (sz.x > 0.5 && sz.y > 0.5);
+    // Determine actual visibility:
+    // Cursor is hidden when client sets surface to NULL, or no buffer is attached, or size is 0.
+    const bool hasSurface = !img.surface.expired() && img.surface.lock() != nullptr;
+    const bool hasBuffer = (img.pBuffer != nullptr || img.bufferTex != nullptr || hasSurface);
+    const bool hasSize = (img.size.x > 0.5 && img.size.y > 0.5) || (sz.x > 0.5 && sz.y > 0.5);
+    const bool isVis = hasBuffer && hasSize;
     g_bridge->isCursorVisible.store(isVis, std::memory_order_relaxed);
 
-    if (isVis) {
-        // If hotspot is located centrally (e.g. I-beam / text / crosshair / move):
-        // In XCursor / Wayland themes, I-beam hotspot x is near width / 2.
-        // For arrow pointer, hotspot is at (0, 0) or tip (x <= 0.25 * width).
-        if (hs.x > sz.x * 0.25f || hs.y > sz.y * 0.25f) {
-            g_bridge->cursorShape.store(1, std::memory_order_relaxed);
-            g_bridge->centerOffsetX.store(0.0f, std::memory_order_relaxed);
-            g_bridge->centerOffsetY.store(0.0f, std::memory_order_relaxed);
-        } else {
-            g_bridge->cursorShape.store(0, std::memory_order_relaxed);
-            // Default arrow cursor: visual center is ~40% diagonal across cursor box
-            float baseSz = (sz.x >= 8.0f && sz.x <= 128.0f) ? (float)sz.x : 24.0f;
-            g_bridge->centerOffsetX.store(baseSz * 0.40f, std::memory_order_relaxed);
-            g_bridge->centerOffsetY.store(baseSz * 0.40f, std::memory_order_relaxed);
-        }
+    // Live compositor pointer coordinates
+    const auto pos = Pointer::mgr()->position();
+    if (pos.x >= 0 && pos.y >= 0) {
+        g_bridge->mouseX.store((float)pos.x, std::memory_order_relaxed);
+        g_bridge->mouseY.store((float)pos.y, std::memory_order_relaxed);
     }
+
+    if (isVis) {
+        // Effective cursor dimensions in logical coordinates
+        const double w = (img.size.x > 0.5) ? img.size.x : ((sz.x > 0.5) ? sz.x : 24.0);
+        const double h = (img.size.y > 0.5) ? img.size.y : ((sz.y > 0.5) ? sz.y : 24.0);
+
+        // Precise geometric offset from pointer hotspot (where clicks happen) to visual center of the cursor icon:
+        // Hotspot (0,0) with 24x24 arrow -> center is at (+12, +12).
+        // Hotspot (12,12) with 24x24 I-beam or crosshair -> center is at (0, 0).
+        float offX = float(w * 0.5 - hs.x);
+        float offY = float(h * 0.5 - hs.y);
+
+        offX = std::clamp(offX, -32.0f, 32.0f);
+        offY = std::clamp(offY, -32.0f, 32.0f);
+
+        const bool isCentered = (std::abs(offX) < 2.5f && std::abs(offY) < 2.5f);
+        g_bridge->cursorShape.store(isCentered ? 1 : 0, std::memory_order_relaxed);
+        g_bridge->centerOffsetX.store(offX, std::memory_order_relaxed);
+        g_bridge->centerOffsetY.store(offY, std::memory_order_relaxed);
+    }
+}
+
+static void onTick() {
+    updateCursorShapeAndVisibility();
 }
 
 static void onCursorChanged() {
@@ -95,16 +116,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     if (Pointer::mgr()) {
         g_cursorHook = new Hyprutils::Signal::CHyprSignalListener(Pointer::mgr()->m_events.cursorChanged.listen(onCursorChanged));
     }
+    g_tickHook = new Hyprutils::Signal::CHyprSignalListener(Event::bus()->m_events.tick.listen(onTick));
     g_mouseMoveHook = new Hyprutils::Signal::CHyprSignalListener(Event::bus()->m_events.input.mouse.move.listen(onMouseMove));
     g_mouseButtonHook = new Hyprutils::Signal::CHyprSignalListener(Event::bus()->m_events.input.mouse.button.listen(onMouseButton));
 
     updateCursorShapeAndVisibility();
 
-    return {"mousepet-hyprland", "MousePet Hyprland companion hook for real-time cursor, shape, visibility and clicks", "MousePet", "1.2"};
+    return {"mousepet-hyprland", "MousePet Hyprland companion hook for real-time cursor, shape, visibility and clicks", "MousePet", "1.3"};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
     delete g_cursorHook; g_cursorHook = nullptr;
+    delete g_tickHook; g_tickHook = nullptr;
     delete g_mouseMoveHook; g_mouseMoveHook = nullptr;
     delete g_mouseButtonHook; g_mouseButtonHook = nullptr;
     if (g_bridge) {
