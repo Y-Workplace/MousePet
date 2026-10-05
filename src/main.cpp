@@ -30,7 +30,7 @@
 namespace mousepet {
 namespace {
 
-constexpr const char* VERSION = "0.2.0";
+constexpr const char* VERSION = "0.2.1";
 
 void usage() {
     std::fprintf(
