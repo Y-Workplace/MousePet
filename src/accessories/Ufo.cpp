@@ -21,11 +21,13 @@ public:
     }
 
     void onBurst(Pet& pet) override {
-        // High-energy abduction scan pulse
-        for (int i = 0; i < 18; i++) {
-            float a = pet.random() * TAU;
-            float spd = 1.2f + pet.random() * 2.5f;
-            pet.emit(pet.body.x, pet.body.y, std::cos(a) * spd, std::sin(a) * spd, 1.0f);
+        // Abduction tractor beam absorption vortex: particles sucked inward and upward into saucer
+        for (int i = 0; i < 22; i++) {
+            float ox = (pet.random() - 0.5f) * 32.0f;
+            float oy = 25.0f + pet.random() * 25.0f;
+            float dx = -ox * 0.06f + (pet.random() - 0.5f) * 0.4f;
+            float dy = -2.2f - pet.random() * 1.6f; // sucked upward into tractor beam
+            pet.emit(pet.body.x + ox, pet.body.y + oy, dx, dy, 1.2f);
         }
     }
 
@@ -34,25 +36,36 @@ public:
         const double sz = pet.param("size", 1.0f);
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle * 0.5f);
+        cairo_rotate(cr, b.angle * 0.4f);
         cairo_scale(cr, sz, sz);
 
         // 1. Tractor Abduction Beam (Projects downward from bottom of saucer)
-        const double beamAlpha = 0.25 + std::sin(beamPulse_) * 0.08 + b.burst * 0.45;
+        const double beamAlpha = 0.25 + std::sin(beamPulse_) * 0.08 + b.burst * 0.55;
+        const double beamSpread = 18.0 + b.burst * 10.0;
+        const double beamLength = 40.0 + b.burst * 15.0;
+
         cairo_new_path(cr);
         cairo_move_to(cr, -6, 4);
-        cairo_line_to(cr, -18, 38);
-        cairo_line_to(cr, 18, 38);
+        cairo_line_to(cr, -beamSpread, beamLength);
+        cairo_line_to(cr, beamSpread, beamLength);
         cairo_line_to(cr, 6, 4);
         cairo_close_path(cr);
 
-        cairo_pattern_t* bg = cairo_pattern_create_linear(0, 4, 0, 38);
+        cairo_pattern_t* bg = cairo_pattern_create_linear(0, 4, 0, beamLength);
         stop(bg, 0, rgba(74, 222, 128, beamAlpha * 1.5));
-        stop(bg, 0.5, rgba(52, 211, 153, beamAlpha * 0.8));
+        stop(bg, 0.5, rgba(52, 211, 153, beamAlpha * 0.9));
         stop(bg, 1, rgba(16, 185, 129, 0.0));
         cairo_set_source(cr, bg);
         cairo_fill(cr);
         cairo_pattern_destroy(bg);
+
+        // Pulsing energy rings in tractor beam on burst
+        if (b.burst > 0.05f) {
+            source(cr, rgba(110, 231, 183, b.burst * 0.7));
+            cairo_set_line_width(cr, 1.2);
+            ellipse(cr, 0, 15.0 + (1.0 - b.burst) * 20.0, 10.0 + b.burst * 4.0, 3.0);
+            cairo_stroke(cr);
+        }
 
         // 2. Cockpit Glass Dome
         glow(cr, 0, -8, 2, 16, {{0, rgba(167, 243, 208, 0.4)}, {1, rgba(167, 243, 208, 0)}});
@@ -74,54 +87,60 @@ public:
 
         // Cute Little Alien inside
         source(cr, rgb(0x22c55e));
-        circle(cr, 0, -8, 3.2); cairo_fill(cr);
-        // Alien big glossy eyes
+        circle(cr, 0, -7.5, 3.5);
+        cairo_fill(cr);
+        // Big black alien eyes
         source(cr, rgb(0x022c22));
-        ellipse(cr, -1.3, -8.2, 1.1, 1.6, -0.2);
-        ellipse(cr, 1.3, -8.2, 1.1, 1.6, 0.2);
+        ellipse(cr, -1.5, -8.0, 1.1, 1.5, -0.3);
+        ellipse(cr, 1.5, -8.0, 1.1, 1.5, 0.3);
         cairo_fill(cr);
 
-        // 3. Metallic Saucer Disc (Middle flange)
-        cairo_pattern_t* sg = cairo_pattern_create_linear(-22, 0, 22, 0);
-        stop(sg, 0, rgb(0x475569));
-        stop(sg, 0.25, rgb(0x94a3b8));
-        stop(sg, 0.5, rgb(0xf1f5f9));
-        stop(sg, 0.75, rgb(0x94a3b8));
-        stop(sg, 1, rgb(0x475569));
-        cairo_set_source(cr, sg);
-        ellipse(cr, 0, -1, 20, 6.5);
+        // 3. Metallic Saucer Hull
+        cairo_pattern_t* hg = cairo_pattern_create_linear(0, -4, 0, 6);
+        stop(hg, 0, rgb(0x94a3b8));
+        stop(hg, 0.4, rgb(0xcfd8dc));
+        stop(hg, 0.8, rgb(0x64748b));
+        stop(hg, 1, rgb(0x334155));
+        cairo_set_source(cr, hg);
+        ellipse(cr, 0, 0, 20, 6.5);
         cairo_fill_preserve(cr);
-        cairo_pattern_destroy(sg);
+        cairo_pattern_destroy(hg);
 
-        source(cr, rgb(0xcbd5e1));
-        cairo_set_line_width(cr, 1.2);
+        source(cr, rgba(255, 255, 255, 0.6));
+        cairo_set_line_width(cr, 1.0);
         cairo_stroke(cr);
 
-        // Bottom saucer hull
-        cairo_pattern_t* bh = cairo_pattern_create_linear(0, 0, 0, 7);
-        stop(bh, 0, rgb(0x334155));
-        stop(bh, 1, rgb(0x1e293b));
+        // Underside core emitter
+        cairo_pattern_t* bh = cairo_pattern_create_radial(0, 2.5, 1, 0, 2.5, 9);
+        stop(bh, 0, rgb(0x4ade80));
+        stop(bh, 0.5, rgb(0x0f766e));
+        stop(bh, 1, rgb(0x0f172a));
         cairo_set_source(cr, bh);
         ellipse(cr, 0, 2.5, 11, 4.2);
         cairo_fill(cr);
         cairo_pattern_destroy(bh);
 
-        // 4. Rotating Perimeter Chasing Lights (5 lights)
-        for (int i = 0; i < 5; i++) {
-            float ang = lightRot_ + i * (TAU / 5);
-            float lx = std::cos(ang) * 16.5f;
-            float ly = -1.0f + std::sin(ang) * 4.5f;
-            if (std::sin(ang) < -0.2f) continue; // Behind saucer horizon
+        // 4. Rotating Perimeter Chasing Lights (6 lights along 3D front rim arc)
+        static const Color lightColors[] = {rgb(0x38bdf8), rgb(0xfacc15), rgb(0xf43f5e), rgb(0xa855f7), rgb(0x4ade80), rgb(0xf97316)};
+        for (int i = 0; i < 6; i++) {
+            float ang = lightRot_ + i * (TAU / 6);
+            float cosA = std::cos(ang);
+            float sinA = std::sin(ang);
+            float lx = cosA * 18.0f;
+            float ly = sinA * 5.2f;
 
-            static const Color lightColors[] = {rgb(0x38bdf8), rgb(0xfacc15), rgb(0xf43f5e), rgb(0xa855f7), rgb(0x4ade80)};
-            source(cr, lightColors[i % 5]);
-            circle(cr, lx, ly, 1.8);
+            if (sinA < -0.15f) continue;
+
+            float lightScale = 0.85f + sinA * 0.35f;
+            glow(cr, lx, ly, 0, 4.5 * lightScale, {{0, rgba(255, 255, 255, 0.85)}, {1, rgba(255, 255, 255, 0)}});
+            source(cr, lightColors[i % 6]);
+            circle(cr, lx, ly, 1.8f * lightScale);
             cairo_fill(cr);
         }
     }
 
     void bounds(const Pet& pet, Bounds& b) const override {
-        addBox(pet, b, 38 * pet.param("size", 1.0f));
+        addBox(pet, b, 40 * pet.param("size", 1.0f));
     }
 };
 
@@ -131,7 +150,7 @@ static struct UfoRegistrar {
                            CoreConfig{60, 0.50f, 0.92f, 0.16f},
                            hints({{"orbitX", 40}, {"orbitY", -30}, {"sway", 4.5f}, {"lift", -0.03f}, {"kick", 5}, {"sparks", 16}}),
                            RopeStyle{rgb(0x475569), rgb(0x4ade80), 2.0f},
-                           ParticleStyle{rgb(0x4ade80), 2.2f, 0.04f}, // particles drift down
+                           ParticleStyle{rgb(0x4ade80), 2.2f, -0.02f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},
                            makeAccessory<Ufo>()});
     }

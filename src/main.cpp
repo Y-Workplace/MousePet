@@ -30,7 +30,7 @@
 namespace mousepet {
 namespace {
 
-constexpr const char* VERSION = "0.2.1";
+constexpr const char* VERSION = "0.2.0";
 
 void usage() {
     std::fprintf(
@@ -591,6 +591,26 @@ int main(int argc, char** argv) {
         }
         if (sub.rfind("--", 0) == 0) sub = sub.substr(2);
         char* args[] = {(char*)"select", (char*)sub.c_str()};
+        return ctl(2, args);
+    }
+
+    if (cmd == "select") {
+        if (argc <= 2) { std::fprintf(stderr, "usage: mousepet select <id>\n"); return 2; }
+        char* args[] = {(char*)"select", argv[2]};
+        return ctl(2, args);
+    }
+    if (cmd == "status") {
+        char* args[] = {(char*)"status"};
+        return ctl(1, args);
+    }
+    if (cmd == "toggle" || cmd == "show" || cmd == "hide" || cmd == "reset") {
+        char* args[] = {(char*)cmd.c_str()};
+        return ctl(1, args);
+    }
+    // Direct pet name syntax: mousepet allay | kite | ufo | ship | etc.
+    loadDynamicAccessories();
+    if (findAccessory(cmd)) {
+        char* args[] = {(char*)"select", (char*)cmd.c_str()};
         return ctl(2, args);
     }
 

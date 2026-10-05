@@ -4,17 +4,33 @@ namespace mousepet {
 
 class Ship final : public Accessory {
     float thrusterPulse_ = 0.0f;
+    float heading_ = -PI * 0.5f;
 
 public:
     void update(Pet& pet) override {
         Body& b = pet.body;
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
-        thrusterPulse_ += 0.25f + sp * 0.1f;
+        thrusterPulse_ += 0.25f + sp * 0.12f;
+
+        // Smooth flight steering: ship nose aims towards velocity or target mouse
+        float targetHeading = heading_;
+        if (sp > 0.4f) {
+            targetHeading = std::atan2(b.vy, b.vx);
+        } else {
+            float toMx = pet.mouse.x - b.x, toMy = pet.mouse.y - b.y;
+            if (toMx * toMx + toMy * toMy > 30.0f) {
+                targetHeading = std::atan2(toMy, toMx);
+            }
+        }
+        float diff = targetHeading - heading_;
+        while (diff < -PI) diff += TAU;
+        while (diff > PI) diff -= TAU;
+        heading_ += diff * 0.16f;
 
         // Ion engine exhaust trail
-        if (sp > 0.8f || pet.random() < 0.25f) {
-            float ang = b.angle + PI;
-            float c = std::cos(ang), s = std::sin(ang);
+        if (sp > 0.6f || pet.random() < 0.25f) {
+            float exhaustAng = heading_ + PI;
+            float c = std::cos(exhaustAng), s = std::sin(exhaustAng);
             float ex = b.x + c * 16.0f, ey = b.y + s * 16.0f;
             pet.emit(ex + (pet.random() - 0.5f) * 4.0f,
                      ey + (pet.random() - 0.5f) * 4.0f,
@@ -39,12 +55,12 @@ public:
         const float sp = std::sqrt(b.vx * b.vx + b.vy * b.vy);
 
         cairo_translate(cr, b.x, b.y);
-        cairo_rotate(cr, b.angle + PI * 0.5f);  // Ship faces forward along motion
+        // Ship nose (0, -18) points forward in the direction of heading
+        cairo_rotate(cr, heading_ + PI * 0.5f);
         cairo_scale(cr, sz, sz);
 
         // 1. Plasma Thruster Exhaust
         const double flameLen = 12.0 + sp * 3.5 + std::sin(thrusterPulse_) * 3.0 + b.burst * 14.0;
-        // Outer glow
         glow(cr, 0, 14, 0, 18,
              {{0, rgba(56, 189, 248, 0.95)}, {0.5, rgba(59, 130, 246, 0.4)}, {1, rgba(37, 99, 235, 0)}},
              CAIRO_OPERATOR_SCREEN, 0.9);
@@ -69,85 +85,63 @@ public:
         cairo_line_to(cr, 0, 12 + flameLen * 0.55);
         cairo_line_to(cr, 2.5, 12);
         cairo_close_path(cr);
-        source(cr, rgb(0xffffff));
+        source(cr, rgba(255, 255, 255, 0.95));
         cairo_fill(cr);
 
-        // 2. Shield aura on burst
-        if (b.burst > 0.05f) {
-            glow(cr, 0, 0, 8, 28,
-                 {{0, rgba(56, 189, 248, 0.0)}, {0.8, rgba(56, 189, 248, 0.6)}, {1, rgba(56, 189, 248, 0)}},
-                 CAIRO_OPERATOR_SCREEN, b.burst);
-        }
-
-        // 3. Wings & Hull (Futuristic Delta Starfighter)
-        // Main Wings (Sweep-back)
-        cairo_new_path(cr);
-        cairo_move_to(cr, 0, -22);       // Nose
-        cairo_line_to(cr, 6, -8);
-        cairo_line_to(cr, 20, 10);       // Right wingtip
-        cairo_line_to(cr, 14, 14);
-        cairo_line_to(cr, 5, 11);
-        cairo_line_to(cr, 5, 14);        // Right engine block
-        cairo_line_to(cr, -5, 14);       // Left engine block
-        cairo_line_to(cr, -5, 11);
-        cairo_line_to(cr, -14, 14);
-        cairo_line_to(cr, -20, 10);      // Left wingtip
-        cairo_line_to(cr, -6, -8);
-        cairo_close_path(cr);
-
-        cairo_pattern_t* hg = cairo_pattern_create_linear(-20, 0, 20, 0);
-        stop(hg, 0, rgb(0x334155));
-        stop(hg, 0.5, rgb(0x64748b));
-        stop(hg, 1, rgb(0x334155));
+        // 2. Main Hull (Sleek sci-fi wedge interceptor)
+        cairo_pattern_t* hg = cairo_pattern_create_linear(-16, 0, 16, 0);
+        stop(hg, 0, rgb(0x1e293b));
+        stop(hg, 0.5, rgb(0x475569));
+        stop(hg, 1, rgb(0x1e293b));
         cairo_set_source(cr, hg);
+
+        cairo_new_path(cr);
+        cairo_move_to(cr, 0, -18);      // Needle nose
+        cairo_line_to(cr, 6, -6);
+        cairo_line_to(cr, 18, 8);       // Starboard swept wingtip
+        cairo_line_to(cr, 14, 12);
+        cairo_line_to(cr, 7, 10);
+        cairo_line_to(cr, 5, 12);
+        cairo_line_to(cr, -5, 12);      // Thruster bay
+        cairo_line_to(cr, -7, 10);
+        cairo_line_to(cr, -14, 12);
+        cairo_line_to(cr, -18, 8);      // Port swept wingtip
+        cairo_line_to(cr, -6, -6);
+        cairo_close_path(cr);
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(hg);
 
-        source(cr, rgb(0x94a3b8));
-        cairo_set_line_width(cr, 1.2);
+        source(cr, rgba(56, 189, 248, 0.6));
+        cairo_set_line_width(cr, 0.9);
         cairo_stroke(cr);
 
-        // Wingtip navigation lights
-        source(cr, rgb(0xef4444)); // Left: red beacon
-        circle(cr, -19, 10, 1.6); cairo_fill(cr);
-        source(cr, rgb(0x22c55e)); // Right: green beacon
-        circle(cr, 19, 10, 1.6); cairo_fill(cr);
+        // 3. Wingtip Ion Nav Lights
+        glow(cr, -17, 8, 0, 5, {{0, rgba(239, 68, 68, 0.9)}, {1, rgba(239, 68, 68, 0)}});
+        source(cr, rgb(0xef4444));
+        circle(cr, -17, 8, 1.4); cairo_fill(cr);
 
-        // Central Fuselage spine
-        cairo_new_path(cr);
-        cairo_move_to(cr, 0, -22);
-        cairo_line_to(cr, 4, -4);
-        cairo_line_to(cr, 3, 11);
-        cairo_line_to(cr, -3, 11);
-        cairo_line_to(cr, -4, -4);
-        cairo_close_path(cr);
-        source(cr, rgb(0x1e293b));
-        cairo_fill(cr);
+        glow(cr, 17, 8, 0, 5, {{0, rgba(34, 197, 94, 0.9)}, {1, rgba(34, 197, 94, 0)}});
+        source(cr, rgb(0x22c55e));
+        circle(cr, 17, 8, 1.4); cairo_fill(cr);
 
-        // 4. Cockpit Glass Canopy
-        cairo_pattern_t* cg = cairo_pattern_create_linear(0, -14, 0, 2);
-        stop(cg, 0, rgba(56, 189, 248, 0.95));
-        stop(cg, 0.7, rgba(14, 165, 233, 0.85));
-        stop(cg, 1, rgba(2, 132, 199, 0.65));
-        cairo_new_path(cr);
-        cairo_move_to(cr, 0, -16);
-        cairo_curve_to(cr, 3, -12, 3.5, 0, 0, 3);
-        cairo_curve_to(cr, -3.5, 0, -3, -12, 0, -16);
-        cairo_close_path(cr);
+        // 4. Cockpit Canopy (Glowing Neon Cyan)
+        glow(cr, 0, -4, 0, 8, {{0, rgba(56, 189, 248, 0.8)}, {1, rgba(56, 189, 248, 0)}});
+        cairo_pattern_t* cg = cairo_pattern_create_linear(0, -9, 0, 1);
+        stop(cg, 0, rgba(224, 242, 254, 0.95));
+        stop(cg, 0.5, rgba(56, 189, 248, 0.9));
+        stop(cg, 1, rgba(3, 105, 161, 0.7));
         cairo_set_source(cr, cg);
+
+        cairo_new_path(cr);
+        cairo_move_to(cr, 0, -9);
+        cairo_curve_to(cr, 3.2, -6, 3.2, -1, 0, 1);
+        cairo_curve_to(cr, -3.2, -1, -3.2, -6, 0, -9);
+        cairo_close_path(cr);
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(cg);
 
         source(cr, rgba(255, 255, 255, 0.8));
-        cairo_set_line_width(cr, 1.0);
-        cairo_stroke(cr);
-
-        // Canopy specular glint
-        source(cr, rgba(255, 255, 255, 0.75));
-        cairo_new_path(cr);
-        cairo_move_to(cr, -1.2, -13);
-        cairo_line_to(cr, 0.2, -6);
-        cairo_set_line_width(cr, 1.2);
+        cairo_set_line_width(cr, 0.8);
         cairo_stroke(cr);
     }
 
@@ -159,10 +153,10 @@ public:
 static struct ShipRegistrar {
     ShipRegistrar() {
         registerAccessory({"ship", "Nave Espacial", rgb(0x38bdf8),
-                           CoreConfig{60, 0.55f, 0.93f, 0.15f},
-                           hints({{"orbitX", 45}, {"orbitY", -25}, {"sway", 4}, {"tilt", 0.90f}, {"tiltVel", 0.08f}, {"kick", 5}, {"sparks", 16}}),
-                           RopeStyle{rgb(0x334155), rgb(0x38bdf8), 2.0f},
-                           ParticleStyle{rgb(0x38bdf8), 2.2f, 0.0f},
+                           CoreConfig{55, 0.55f, 0.90f, 0.15f},
+                           hints({{"orbitX", 35}, {"orbitY", -30}, {"sway", 3.0f}, {"lift", -0.04f}, {"kick", 5}, {"sparks", 16}}),
+                           RopeStyle{rgb(0x334155), rgb(0x38bdf8), 1.5f},
+                           ParticleStyle{rgb(0x38bdf8), 2.0f, -0.01f},
                            {{"size", "Size", 0.7f, 1.5f, 0.05f, 1.0f}},
                            makeAccessory<Ship>()});
     }
